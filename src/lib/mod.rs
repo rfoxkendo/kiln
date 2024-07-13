@@ -44,11 +44,51 @@ impl Step {
 
 /// A fully described kil program:
 /// 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Program {
     name : String,
     description : String,
     program : Vec<Step>
+}
+impl Program {
+    pub fn new (name : &str, description : &str) -> Program {
+        Program {
+            name : String::from(name),
+            description: String::from(description),
+            program : vec![]
+        }
+    }
+    pub fn from_steps(name : &str, description : &str, program: &Vec<Step>) -> Program {
+        Program {
+            name : String::from(name),
+            description : String::from(description),
+            program : program.clone()
+        }
+    }
+
+    pub fn add_step(&mut self, step : Step) -> &Program {
+        self.program.push(step);
+        self
+    }
+    pub fn add_steps(&mut self, steps : &Vec<Step>) -> &Program {
+        self.program.extend_from_slice(steps.as_slice());
+
+        self
+    }
+    pub fn clear(&mut self) -> &Program {
+        self.program.clear();
+        self
+    }
+
+    pub fn steps(&self) -> Vec<Step> {
+        self.program.clone()
+    }
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    pub fn description(&self) -> String {
+        self.description.clone()
+    }
 }
 
 /// A project is a description, a time/date that it was run
@@ -94,6 +134,174 @@ mod step_tests {
     fn hold_1() {
         let r = Step::new(1000.0, RampRate::DegreesPerHour(100.0), 32);
         assert_eq!(r.hold_time(), 32);
+    }
+}
+
+#[cfg(test)]
+mod program_tests {
+    use super::*;
+    #[test]
+    fn new_0()  {
+        // Empty program.
+        let pgm = Program::new("small-full", "Full fuse for small pieces");
+        assert_eq!(
+            pgm, Program {
+                name : String::from("small-full"),
+                description: String::from("Full fuse for small pieces"),
+                program : vec![]
+            }
+        );
+    }
+    #[test]
+    fn new_1() {
+        // With a program.
+
+        let steps = vec![
+            Step::new(1000.0, RampRate::DegreesPerHour(300.0), 30),
+            Step::new(1250.0, RampRate::DegreesPerHour(300.0), 15),
+            Step::new(1450.0, RampRate::DegreesPerHour(500.0), 15),
+            Step::new(900.0, RampRate::AFAP, 30)
+        ];
+        let pgm = Program::from_steps("small-full", "Full fuse for small pieces", &steps);
+        assert_eq!(
+            pgm, Program {
+                name : String::from("small-full"),
+                description: String::from("Full fuse for small pieces"),
+                program : steps.clone()
+            }
+        );
+    }
+    #[test]
+    fn add_1() {
+        // Add  a step to an empty project:
+
+        let mut pgm = Program::new("testing", "Test project");
+        assert_eq!(*pgm.add_step(Step::new(1000.0, RampRate::DegreesPerHour(300.0), 30)),
+            Program {
+                name : String::from("testing"),
+                description : String::from("Test project"),
+                program : vec![Step::new(1000.0, RampRate::DegreesPerHour(300.0), 30)]
+            }
+        );
+
+    }
+    #[test]
+    fn add_2() {
+        // add a step to a nonempty program:
+
+        let mut steps = vec![
+            Step::new(1000.0, RampRate::DegreesPerHour(300.0), 30),
+            Step::new(1250.0, RampRate::DegreesPerHour(300.0), 15),
+            Step::new(1450.0, RampRate::DegreesPerHour(500.0), 15),
+            Step::new(900.0, RampRate::AFAP, 30)
+        ];
+        let mut pgm = Program::from_steps("small-full", "Full fuse for small pieces", &steps);
+        let next_step = Step::new(80.0, RampRate::AFAP, 100);
+        steps.push(next_step.clone());
+        assert_eq!(
+            *pgm.add_step(next_step),
+            Program {
+                name : String::from("small-full"),
+                description : String::from("Full fuse for small pieces"),
+                program : steps
+            }
+        );
+    }
+    #[test]
+    fn add_3() {
+        // add multiple steps to an empty project:
+
+        let mut pgm = Program::new("small-full", "Full fuse for small pieces");
+        let steps = vec![
+            Step::new(1000.0, RampRate::DegreesPerHour(300.0), 30),
+            Step::new(1250.0, RampRate::DegreesPerHour(300.0), 15),
+            Step::new(1450.0, RampRate::DegreesPerHour(500.0), 15),
+            Step::new(900.0, RampRate::AFAP, 30)
+        ];
+        assert_eq!(
+            *pgm.add_steps(&steps),
+            Program {
+                name : String::from("small-full"),
+                description: String::from("Full fuse for small pieces"),
+                program: steps
+            }
+        );
+    }
+    #[test]
+    fn add_4() {
+        // Add multiple steps on non-empty project:
+
+        let mut steps = vec![
+            Step::new(1000.0, RampRate::DegreesPerHour(300.0), 30),
+            Step::new(1250.0, RampRate::DegreesPerHour(300.0), 15),
+        
+        ];
+        let more_steps = vec![
+            Step::new(1450.0, RampRate::DegreesPerHour(500.0), 15),
+            Step::new(900.0, RampRate::AFAP, 30)
+        ];
+
+        let mut pgm = Program::from_steps("testing", "description", &steps);
+        steps.extend_from_slice(more_steps.as_slice());
+        assert_eq!(
+            *pgm.add_steps(&more_steps),
+            Program {
+                name : String::from ("testing"), description : String::from("description"),
+                program : steps
+            }
+        );   
+    }
+    #[test]
+    fn clear_0() {
+        // Clear empties the program steps:
+        let steps = vec![
+            Step::new(1000.0, RampRate::DegreesPerHour(300.0), 30),
+            Step::new(1250.0, RampRate::DegreesPerHour(300.0), 15),
+            Step::new(1450.0, RampRate::DegreesPerHour(500.0), 15),
+            Step::new(900.0, RampRate::AFAP, 30)
+        ];
+        let mut pgm = Program::from_steps("small-full", "Full fuse for small pieces", &steps);
+        assert_eq!(
+            *pgm.clear(),
+            Program {
+                name : String::from("small-full"),
+                description: String::from("Full fuse for small pieces"),
+                program: vec![]
+            }
+        );
+    }
+    #[test]
+    fn selector_name() {
+        let steps = vec![
+            Step::new(1000.0, RampRate::DegreesPerHour(300.0), 30),
+            Step::new(1250.0, RampRate::DegreesPerHour(300.0), 15),
+            Step::new(1450.0, RampRate::DegreesPerHour(500.0), 15),
+            Step::new(900.0, RampRate::AFAP, 30)
+        ];
+        let pgm = Program::from_steps("small-full", "Full fuse for small pieces", &steps);
+        assert_eq!(pgm.name(), String::from ("small-full"));
+    }
+    #[test]
+    fn selector_description() {
+        let steps = vec![
+            Step::new(1000.0, RampRate::DegreesPerHour(300.0), 30),
+            Step::new(1250.0, RampRate::DegreesPerHour(300.0), 15),
+            Step::new(1450.0, RampRate::DegreesPerHour(500.0), 15),
+            Step::new(900.0, RampRate::AFAP, 30)
+        ];
+        let pgm = Program::from_steps("small-full", "Full fuse for small pieces", &steps);
+        assert_eq!(pgm.description(), String::from("Full fuse for small pieces"));
+    }
+    #[test]
+    fn selector_steps() {
+        let steps = vec![
+            Step::new(1000.0, RampRate::DegreesPerHour(300.0), 30),
+            Step::new(1250.0, RampRate::DegreesPerHour(300.0), 15),
+            Step::new(1450.0, RampRate::DegreesPerHour(500.0), 15),
+            Step::new(900.0, RampRate::AFAP, 30)
+        ];
+        let pgm = Program::from_steps("small-full", "Full fuse for small pieces", &steps);
+        assert_eq!(pgm.steps(), steps);
     }
 }
 
