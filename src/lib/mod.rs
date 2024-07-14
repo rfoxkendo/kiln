@@ -9,6 +9,7 @@
 #![crate_name="programs"]
 pub mod programs {
     use chrono::prelude::*;
+    use std::time::Duration;
     /// How fast the kiln should go from its current temperature to the next one.
     /// 
     #[derive(Copy, Clone, PartialEq, Debug)]
@@ -106,8 +107,9 @@ pub mod programs {
     /// A project is a description, a time/date that it was run
     /// A second string describing how happy we ware with it.
     /// and more to be added later (vector of images).
-    /// 
-    #[derive(Clone, Debug)]
+    /// Note that ll times are UTC so that they are correct regardless
+    /// of the time-zone.
+    #[derive(Clone, Debug, PartialEq)]
     pub struct Project {
         run_at : DateTime<Utc>,
         description : String,
@@ -115,7 +117,66 @@ pub mod programs {
         program : Program,
     }
     impl Project {
-    
+        // Constructors
+
+        /// Create a new project.  The time it's run will be _now_
+        pub fn new(desc: &str, result: &str, program : &Program) -> Project {
+            Project {
+                run_at: Utc::now(),
+                description: String::from(desc),
+                result : String::from(result),
+                program : program.clone()
+            }
+        }
+        /// If you need to specify when a project was run you can construct it with
+        /// new_at:
+        /// 
+        pub fn new_at(when : &DateTime<Utc>, desc: &str, result: &str, program : &Program) -> Project {
+            Project {
+                run_at : *when,
+                description: String::from(desc),
+                result : String::from(result),
+                program : program.clone()
+            }
+        }
+
+        // Mutators.
+
+        /// If you want to modify the result string you can use this
+        /// Use csae:  You created the project when the kiln started
+        /// now, after the kiln ran and all is cool you report how things
+        /// turned out: 
+        ///
+        pub fn set_result(&mut self, res: &str) -> &Project {
+            self.result = String::from(res);
+            self
+        }
+        /// In case you want to append more to the result string:
+        /// 
+        pub fn append_result(&mut self, res: &str) -> &Project {
+            self.result.push_str(res);
+            self
+        }
+        // Selectors:
+
+        /// When the project was run.
+        pub fn when(&self) -> DateTime<Utc>  {
+            self.run_at
+        }
+        /// Description of project
+        pub fn description(&self) -> String {
+            self.description.clone()
+        }
+        /// Result of project run:
+        /// 
+        pub fn result(&self) -> String {
+            self.result.clone()
+        }
+        /// The program that was run:
+        /// 
+        pub fn program(&self) -> Program {
+            self.program.clone()
+        }
     }
 
 
@@ -320,7 +381,122 @@ pub mod programs {
             assert_eq!(pgm.steps(), steps);
         }
     }
+    #[cfg(test)] 
+    mod project_test {
+        use super::*;
+        #[test]
+        fn new_1() {
+            // Construct now
+            let now = Utc::now();                           // For comparison.
+            let pgm = Program::new("full-fuse", "Full fuse for small objects");
+            let proj = Project::new("A project", "Looks good", &pgm);
 
+            // Now might have turned over a second so we must do a field by field compare.
 
+            assert!(( proj.run_at - now).num_seconds() <= 1);
+            assert_eq!(proj.description, String::from("A project"));
+            assert_eq!(proj.result, String::from("Looks good"));
+            assert_eq!(proj.program, pgm);
+        }
+        #[test]
+        fn new_2() {
+            // Construct at a specific time:
+    
+            let mut five_sec_hence = Utc::now();
+            five_sec_hence += Duration::new(5,0);
+            let pgm = Program::new("full-fuse", "Full fuse for small objects");
+            
+            let proj = Project::new_at(&five_sec_hence, "A project", "Looks good", &pgm);
+    
+            assert_eq!(
+                proj,
+                Project {
+                    run_at : five_sec_hence,
+                    description : String::from("A project"),
+                    result : String::from("Looks good"),
+                    program: pgm
+                }
+            );
+        }
+
+        #[test]
+        fn result_mod_1() {
+            // replace result.
+
+            let mut five_sec_hence = Utc::now();
+            five_sec_hence += Duration::new(5,0);
+            let pgm = Program::new("full-fuse", "Full fuse for small objects");
+            
+            let mut  proj = Project::new_at(&five_sec_hence, "A project", "Looks good", &pgm);
+            proj.set_result("a bit bubbly");
+            assert_eq!(
+                proj,
+                Project {
+                    run_at : five_sec_hence,
+                    description : String::from("A project"),
+                    result : String::from("a bit bubbly"),
+                    program: pgm
+                }
+            );
+        }
+        #[test]
+        fn result_mod2() {
+            // Append string to the result:
+
+            let mut five_sec_hence = Utc::now();
+            five_sec_hence += Duration::new(5,0);
+            let pgm = Program::new("full-fuse", "Full fuse for small objects");
+            
+            let mut  proj = Project::new_at(&five_sec_hence, "A project", "Looks good", &pgm);
+            proj.append_result("\nPrice it at $10.00");
+            assert_eq!(
+                proj,
+                Project {
+                    run_at : five_sec_hence,
+                    description : String::from("A project"),
+                    result : String::from("Looks good\nPrice it at $10.00"),
+                    program: pgm
+                }
+            );
+        }
+        #[test]
+        fn select_when() {
+            let mut five_sec_hence = Utc::now();
+            five_sec_hence += Duration::new(5,0);
+            let pgm = Program::new("full-fuse", "Full fuse for small objects");
+            
+            let proj = Project::new_at(&five_sec_hence, "A project", "Looks good", &pgm);
+            assert_eq!(proj.when(), five_sec_hence);
+        }
+        #[test]
+        fn select_desc() {
+            let mut five_sec_hence = Utc::now();
+            five_sec_hence += Duration::new(5,0);
+            let pgm = Program::new("full-fuse", "Full fuse for small objects");
+            
+            let proj = Project::new_at(&five_sec_hence, "A project", "Looks good", &pgm);
+            assert_eq!(proj.description(), "A project");
+        }
+        #[test]
+        fn select_result() {
+            let mut five_sec_hence = Utc::now();
+            five_sec_hence += Duration::new(5,0);
+            let pgm = Program::new("full-fuse", "Full fuse for small objects");
+            
+            let proj = Project::new_at(&five_sec_hence, "A project", "Looks good", &pgm);
+            assert_eq!(proj.result(), "Looks good");
+        }
+        #[test]
+        fn select_program() {
+            let mut five_sec_hence = Utc::now();
+            five_sec_hence += Duration::new(5,0);
+            let pgm = Program::new("full-fuse", "Full fuse for small objects");
+            
+            let  proj = Project::new_at(&five_sec_hence, "A project", "Looks good", &pgm);
+            assert_eq!(proj.program(), pgm);
+        }
+
+    }
+    
 }
 
