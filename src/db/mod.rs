@@ -39,12 +39,13 @@
 //! 
 //! 
 //! 
-use rusqlite;
+use rusqlite::{self, AndThenRows};
+use crate::lib::programs;
 
 /// This stucture represents a database - it is used
 /// to fetch and store data into a database. 
 pub struct Database {
-    connection : rusqlite::Connection
+    pub connection : rusqlite::Connection
 }
 
 /// The implementation of the database.  Note that 
@@ -135,5 +136,109 @@ impl Database {
             Ok(connection) => Ok(Database {connection : connection}),
             Err(e) => Err(e)
         }
+    }
+}
+
+///
+/// A Result row is a generic type that contains both the
+/// primary key and the underlying struct:
+///
+#[derive(Debug, Clone)]
+pub struct Row <T>
+where T : Clone,
+{
+    id : u32,
+    row : T
+}
+
+impl <T>  Row<T>
+where T: Clone,
+{
+    pub fn new  (id : u32, row : T) -> Row<T> {
+        Row {id : id, row: row.clone()}
+    }
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+    pub fn Contents(&self) -> T {
+        self.row.clone()
+    }
+
+}
+
+// Specific types that we'll use:
+
+type Step = Row<programs::Step>;
+
+#[derive(Debug, Clone)]
+pub struct Program {
+    id : u32,
+    name: String,
+    description : String,
+    program : Vec<Step>
+}
+
+impl Program {
+    // Just make from scratch.
+    //
+    pub fn new(id : u32, name : &str, description: &str, steps : &Vec<Step>) -> Program {
+        Program {
+            id : id, 
+            name : String::from(name),
+            description: String::from(description),
+            program: steps.clone()
+        }
+    }
+    /// Strip of the id parts to give a program::Program.
+    pub fn toProgram(&self) -> programs::Program {
+        let mut result = programs::Program::new(&self.name, &self.description);
+        for s in &self.program {
+             result.add_step(s.Contents());
+        }
+        result
+    }
+    /// Look up a program by name in the databse.
+    /// 
+    pub fn find(db: &Database, name : &str) -> Result<Option<Program>, rusqlite::Error> {
+        //  This query should fetch a  program and all of its steps.
+        let query  = "
+           SELECT Programs.id, name, descripton, Steps.id, target, ramp_rate, hold_time
+           FROM Programs
+           INNER JOIN Steps ON Programs.id = Steps.program_id
+           WHERE name = ?1
+           ORDER BY step_no ASC
+        ";
+        let mut stmt = db.connection.prepare(query, )?;
+        let mut rows = stmt.query((name,))?;
+        let mut num_rows = 0;
+
+        // This are picked out from each row:
+
+        let mut program_id : u32 = 0;
+        let mut program_name  = String::new();
+        let mut description   = String::new();
+        let mut steps = Vec::<Step>::new();
+
+        while let Some(row) = rows.next()? {
+            program_id = row.get_unwrap(0);
+            program_name = row.get_unwrap(1);
+            description = row.get_unwrap(2);
+
+            let step_id = row.get_unwrap(3);
+            let rate = row.get_unwrap(5);    // Need to convert into RampRate:
+            let ramp  = if rate == -1.0 {
+                programs::RampRate::AFAP
+            } else {
+                programs::RampRate::DegreesPerHour(rate)
+            };
+            let step = programs::Step::new(row.get_unwrap(4), ramp, row.get_unwrap(6));
+            steps.push(Row::new(step_id, step));
+        }
+        let res = if steps.len() == 0 {
+            return  Ok(None)
+        } else {
+            return Ok(Some(Program::new(program_id, &program_name, &description, &steps)))
+        };
+        res
     }
 }
