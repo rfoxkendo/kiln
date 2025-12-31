@@ -23,6 +23,8 @@
 
 use serde::{Deserialize, Serialize};
 use serde_rusqlite::*;
+use std::fmt::{Display, Result, Formatter};
+use std::result;
 /// This structure  represents a Kiln. In Sqlite, it will
 /// be represented as:
 /// ```sql
@@ -140,4 +142,60 @@ pub struct KilnProject {
     project : Project,
     firings : Vec<KilnProgram>,
     pictures : Vec<ProjectImage>
+}
+
+/// This enum is the set of errors that can occur.
+/// 
+enum Error {
+    SqlError(rusqlite::Error),
+    Unimplemented,
+}
+
+impl Display for Error {
+ fn fmt(&self, f: &mut Formatter) -> Result {
+    match self {
+        Error::SqlError(e) => write!(f, "{}", e),
+        Test => write!(f, "This operation is not yet implemented")
+    }
+ }   
+}
+
+/// Provides methods and access to a kiln database.
+/// 
+pub struct KilnDatabase {
+    db :rusqlite::Connection
+}
+
+impl KilnDatabase {
+    /// create a new database or open an existing one
+    /// If necessary, the schema described in  the module
+    /// comments are created.
+    ///
+    ///  ### Parameters:
+    /// *  path : &str - the path to the database file.
+    ///  ### Returns:
+    ///   Result<KilnDatabase, Error>
+    fn new(path : &str) -> result::Result<KilnDatabase, Error> {
+        let result = rusqlite::Connection::open(path);
+        match result {
+            Ok(db) => {
+                return Ok(KilnDatabase {db : db})
+            },
+            Err(e) => return {
+                Err(Error::SqlError(e))
+            }
+        };
+        
+    } 
+}
+
+#[cfg(test)]
+mod KilnDatabaseTests {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        let result = KilnDatabase::new(":memory:");
+        assert!(result.is_ok());
+    }
 }
