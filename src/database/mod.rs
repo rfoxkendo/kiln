@@ -179,7 +179,7 @@ pub struct KilnProject {
 /// This enum is the set of errors that can occur.
 /// 
 #[derive(Debug)]
-enum DatabaseError {
+pub enum DatabaseError {
     SqlError(rusqlite::Error),
     DuplicateName(String),
     Unimplemented,
@@ -318,14 +318,14 @@ impl KilnDatabase {
     /// unique
     /// 
     /// ### Parameters:
-    ///     name : name of the new kiln, must be unique.
-    ///     description : Description of the new kiln.  Free text.
+    ///  *   name : name of the new kiln, must be unique.
+    ///  *   description : Description of the new kiln.  Free text.
     /// ### Returns:
     ///         Result<(), DatabaseError>
     /// 
     pub fn add_kiln(&mut self, name : &str, description: &str) -> result::Result<(), DatabaseError> {
         if self.get_count("SELECT COUNT(*) FROM Kilns WHERE name = ?", [name]) != 0 {
-            return Err(DatabaseError::DuplicateName((String::from(name))));
+            return Err(DatabaseError::DuplicateName(String::from(name)));
         }
         let  stmt = self.db.prepare(
             "INSERT INTO Kilns (name, description) VALUES(?, ?)"
@@ -342,10 +342,50 @@ impl KilnDatabase {
             Ok(())
         }
     }
+    /// Get a kiln from the database by name.  This only gets the kilns, not the firing sequences.
+    /// define on the kiln.
+    /// 
+    /// ### Parameters:
+    ///   * name - name of the kiln to fetch.
+    /// ### Returns:
+    ///    Result<Option<Kiln>, DatabaseError>
+    /// 
+    pub fn get_kiln(&mut self, name : &str) -> result::Result<Option<Kiln>, DatabaseError> {
+        let stmt = self
+            .db
+            .prepare("Select id, name, description FROM Kilns WHERE name = ?");
+        if let Err(sqle)  = stmt {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut stmt = stmt.unwrap();
+        let rows = stmt.query([name]);
+        if let Err(sqle) = rows {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut rows = rows.unwrap();
+        let row = rows.next();
+        if let Err(sqle) = row {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+
+        let row = row.unwrap();
+        if let None = row {
+            Ok(None)
+        } else {
+            let row = row.unwrap();
+            let name : String = row.get_unwrap(1);
+            let description : String = row.get_unwrap(2);
+            Ok(Some(Kiln::new(
+                row.get_unwrap(0), &name, &description
+            )))
+        }
+
+
+    }
 }
 
 #[cfg(test)]
-mod KilnDatabaseTests {
+mod kiln_database_tests {
     use super::*;
     fn has_table(db: &mut rusqlite::Connection, name: &str) -> bool {
         let stmt = db.prepare("
@@ -420,18 +460,49 @@ mod KilnDatabaseTests {
             .add_kiln("Kiln1", "This kiln can be added"); //error.
         assert!(result.is_err());
         let error = result.err().unwrap();
-        if let(DatabaseError::DuplicateName(s)) = error {
+        if let DatabaseError::DuplicateName(s) = error {
             assert_eq!(s, "Kiln1");                   // Maybe too fragile?
         } else {
             assert!(false);
         }
     }
+    #[test]
+    fn get_kiln_1() {
+        // Getting a nonexistent kiln is not an error, but gives a None:
 
+        let mut database = KilnDatabase::new(":memory:")
+            .unwrap();
+
+        // Non kilns in the database so a get retursn ok(none).
+        let result = database.get_kiln("Kiln1");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+
+    }
+    #[test]
+    fn get_kiln_2() {
+        // Get a kiln that exists:
+
+        let mut database = KilnDatabase::new(":memory:").unwrap();
+        database.add_kiln("kiln", "Some kiln").unwrap();
+
+        let result = database.get_kiln("kiln");
+        assert!(result.is_ok());
+
+        let kiln = result.unwrap();
+        assert!(kiln.is_some());
+
+        let kiln = kiln.unwrap();      // The kiln itself.
+
+        assert_eq!(kiln.id(), 1);
+        assert_eq!(kiln.name(), "kiln");
+        assert_eq!(kiln.description(), "Some kiln");
+    }
     
 }
 
 #[cfg(test)]
-mod KilnTests {
+mod kiln_tests {
     use super::*;
     #[test]
     fn new_1() {
