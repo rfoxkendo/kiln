@@ -340,3 +340,45 @@ mod KilnDatabaseTests {
         assert!(has_table(&mut db, "Project_images"));
     }
 }
+
+#[cfg(test)]
+mod KilnTests {
+    use super::*;
+    #[test]
+    fn new_1() {
+        let result = Kiln::new(1, "Akiln", "A description");
+        assert_eq!(
+            result,
+            Kiln { id: 1, name: String::from("Akiln"), description: String::from("A description")}
+        );
+    }
+    #[test]
+    fn selector_1() {
+        let result = Kiln::new(1, "AKiln", "A description");
+        assert_eq!(result.id(), 1);
+
+    }
+    #[test]
+    fn selector_2() {
+        let result = Kiln::new(1, "AKiln", "A description");
+        assert_eq!(result.name(), "AKiln");
+    }
+    #[test]
+    fn selector_3() {
+        let result = Kiln::new(1, "AKiln", "A description");
+        assert_eq!(result.description(), "A description")
+    }
+
+    #[test]
+    fn mutator_1() {
+        let mut kiln = Kiln::new(1, "AKiln", "A description");
+        kiln.set_name("Kiln1");
+        assert_eq!(kiln.name, "Kiln1");
+    }
+    #[test]
+    fn mutator_2() {
+        let mut kiln = Kiln::new(1, "AKiln", "A description");
+        kiln.set_description("A new description for the kiln");
+        assert_eq!(kiln.description, "A new description for the kiln");
+    }
+}
