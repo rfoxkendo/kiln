@@ -181,6 +181,7 @@ pub struct KilnProject {
 #[derive(Debug)]
 enum DatabaseError {
     SqlError(rusqlite::Error),
+    DuplicateName(String),
     Unimplemented,
 }
 
@@ -188,6 +189,7 @@ impl Display for DatabaseError {
  fn fmt(&self, f: &mut Formatter) -> Result {
     match self {
         DatabaseError::SqlError(e) => write!(f, "{}", e),
+        DatabaseError::DuplicateName(name) => write!(f, "Duplicate name: {}", name),
         DatabaseError::Unimplemented => write!(f, "This operation is not yet implemented")
     }
  }   
@@ -280,6 +282,15 @@ impl KilnDatabase {
         Ok(())
     }
 
+    // Return a value from a SELECT COUNT(*) thing:
+    fn get_count<P : rusqlite::Params>(&mut self, query : &str, params : P) -> u64 {
+        let mut stmt = self.db.prepare(query).unwrap();
+        let mut  rows = stmt.query(params).unwrap();
+        let  row = rows.next().unwrap().unwrap();
+
+        row.get_unwrap(0)
+    }
+
     /// create a new database or open an existing one
     /// If necessary, the schema described in  the module
     /// comments are created.
@@ -312,7 +323,10 @@ impl KilnDatabase {
     /// ### Returns:
     ///         Result<(), DatabaseError>
     /// 
-    fn add_kiln(&mut self, name : &str, description: &str) -> result::Result<(), DatabaseError> {
+    pub fn add_kiln(&mut self, name : &str, description: &str) -> result::Result<(), DatabaseError> {
+        if self.get_count("SELECT COUNT(*) FROM Kilns WHERE name = ?", [name]) != 0 {
+            return Err(DatabaseError::DuplicateName((String::from(name))));
+        }
         let  stmt = self.db.prepare(
             "INSERT INTO Kilns (name, description) VALUES(?, ?)"
         );
@@ -395,6 +409,25 @@ mod KilnDatabaseTests {
         assert!(rows.next().unwrap().is_none());
 
     }
+    #[test]
+    fn add_kiln_2() {
+        // Duplicate kiln mame is not allowed:
+
+        let mut database = KilnDatabase::new(":memory:")
+            .unwrap();
+        database.add_kiln("Kiln1", "This kiln can be added").unwrap();
+        let result = database
+            .add_kiln("Kiln1", "This kiln can be added"); //error.
+        assert!(result.is_err());
+        let error = result.err().unwrap();
+        if let(DatabaseError::DuplicateName(s)) = error {
+            assert_eq!(s, "Kiln1");                   // Maybe too fragile?
+        } else {
+            assert!(false);
+        }
+    }
+
+    
 }
 
 #[cfg(test)]
