@@ -42,6 +42,36 @@ pub struct Kiln {
     name : String,
     description : String
 }
+impl Kiln {
+    pub fn new(id : u64, name : &str, description : &str) -> Kiln {
+        Kiln {
+            id: id, 
+            name: String::from(name),
+             description: String::from(description)
+        }
+    }
+    // Accessors:
+    /// Note that the id is considered immutable.
+    pub fn id(&self) -> u64 { 
+        self.id
+    }
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    pub fn description(&self) -> String {
+        self.description.clone()
+    }
+
+    // Mutators:
+
+    pub fn set_name(&mut self, new_name : &str) {
+        self.name = String::from (new_name);
+    }
+    pub fn set_description(&mut self, new_description : &str) {
+        self.description = String::from (new_description);
+    }
+
+}
 
 ///  These structures represent a firing sequence
 ///  and its steps.
@@ -258,7 +288,7 @@ impl KilnDatabase {
     /// *  path : &str - the path to the database file.
     ///  ### Returns:
     ///   Result<KilnDatabase, Error>
-    fn new(path : &str) -> result::Result<KilnDatabase, DatabaseError> {
+    pub fn new(path : &str) -> result::Result<KilnDatabase, DatabaseError> {
         let result = rusqlite::Connection::open(path);
         match result {
             Ok(mut db) => {
