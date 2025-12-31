@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 serde = {version = "1.0.228", features=["derive"]}
+rusqlite = {version = "0.37.0", features=["bundled"]}
 serde_rusqlite = "0.40.1"
