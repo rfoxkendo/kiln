@@ -25,6 +25,8 @@ use serde::{Deserialize, Serialize};
 use serde_rusqlite::*;
 use std::fmt::{Display, Result, Formatter};
 use std::result;
+use rusqlite::Error;
+
 /// This structure  represents a Kiln. In Sqlite, it will
 /// be represented as:
 /// ```sql
@@ -52,11 +54,11 @@ pub struct Kiln {
 ///   descripton  TEXT,
 ///   kiln_id     INTEGER -- Foreign key into Kilns
 /// )
-/// CREATE TABLE IF NOT EXISTS Firing_step (
+/// CREATE TABLE IF NOT EXISTS Firing_steps (
 ///    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-///    sequence_id INTEGER  -- FK to Firing_sequences
-///    ramp:       INTEGER, -- -1 means AFAP.
-///    target:     INTEGER
+///    sequence_id INTEGER,  -- FK to Firing_sequences
+///    ramp        INTEGER, -- -1 means AFAP.
+///    target      INTEGER
 /// )
 /// ```
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -91,7 +93,7 @@ pub struct KilnProgram {
 /// database are:
 /// 
 /// ```sql
-/// CREATE TABLE IF NOT EXISTS Project (
+/// CREATE TABLE IF NOT EXISTS Projects (
 ///    id          INTEGER PRIMARY KEY AUTOINCREMENT,
 ///    name        TEXT,
 ///    description TEXT
@@ -102,7 +104,7 @@ pub struct KilnProgram {
 ///    firing_sequence_id INTEGER, -- FK to Firing_squences
 ///    comment            TEXT  -- maybe why this firing.
 /// )
-/// CREATE TABLE Project_Images (
+/// CREATE TABLE Project_images (
 ///   id         INTEGER PRIMARY KEY AUTOINCREMENT,
 ///   project_id INTEGER -- FK to project.
 ///   name       TEXT,   -- Original filename e.. final.jpg
@@ -118,7 +120,7 @@ pub struct Project {
 }
 /// The firing steps associated with a project:
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct ProjectFringSteps {
+pub struct ProjectFiringSteps {
     id : u64,
     project_id : u64,
     firing_sequence_id : u64,
@@ -146,16 +148,17 @@ pub struct KilnProject {
 
 /// This enum is the set of errors that can occur.
 /// 
-enum Error {
+#[derive(Debug)]
+enum DatabaseError {
     SqlError(rusqlite::Error),
     Unimplemented,
 }
 
-impl Display for Error {
+impl Display for DatabaseError {
  fn fmt(&self, f: &mut Formatter) -> Result {
     match self {
-        Error::SqlError(e) => write!(f, "{}", e),
-        Test => write!(f, "This operation is not yet implemented")
+        DatabaseError::SqlError(e) => write!(f, "{}", e),
+        DatabaseError::Unimplemented => write!(f, "This operation is not yet implemented")
     }
  }   
 }
@@ -167,6 +170,86 @@ pub struct KilnDatabase {
 }
 
 impl KilnDatabase {
+    // This is a bit longer a function than I'd like.  It creates the schema
+    // for the database... if it's not yet created.
+
+    fn make_schema(db: &mut rusqlite::Connection) -> result::Result<(), rusqlite::Error> {
+        // Kilns:
+        if let Err(e) = db.execute(
+            r#" CREATE TABLE IF NOT EXISTS Kilns (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            name         TEXT        -- name of kiln.
+            description  TEXT -- describes the kiln.
+         )"#, 
+            []
+        ) {
+            return Err(e);
+        }
+        // Firing_sequences:
+        if let Err(e) = db.execute(
+            "CREATE TABLE IF NOT EXISTS Firing_sequences (
+                    id           INTEGER  PRIMARY KEY AUTOINCREMENT,
+                    name        TEXT,  
+                    descripton  TEXT,
+                    kiln_id     INTEGER -- Foreign key into Kilns
+                )",
+            []
+        ) {
+            return Err(e);
+        }
+        // Firing_steps.
+        if let Err(e) = db.execute(
+            " CREATE TABLE IF NOT EXISTS Firing_steps (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sequence_id INTEGER,  -- FK to Firing_sequences
+                    ramp       INTEGER, -- -1 means AFAP.
+                    target     INTEGER
+                )",
+            []
+        ) {
+            return Err(e);
+        }
+        // Projects:
+        if let Err(e) = db.execute(
+            "CREATE TABLE IF NOT EXISTS Projects (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name        TEXT,
+                    description TEXT
+                )",
+            []
+        ) {
+            return Err(e);
+        }
+        // Project_firings 
+
+        if let Err(e) = db.execute(
+            " CREATE TABLE IF NOT EXISTS Project_firings (
+                    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id         INTEGER -- FK to Project.
+                    firing_sequence_id INTEGER, -- FK to Firing_squences
+                    comment            TEXT  -- maybe why this firing.
+                )",
+            []
+        ) {
+            return Err(e)
+        }
+        // Project_images:
+
+        if let Err(e) = db.execute(
+            "CREATE TABLE Project_images (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER -- FK to project.
+                    name       TEXT,   -- Original filename e.. final.jpg
+                    caption    TEXT, -- What the picture is.
+                    contents   BLOB -- The image file contents.
+                )",
+            []
+        ) {
+            return Err(e);
+        }
+        Ok(())
+    }
+
     /// create a new database or open an existing one
     /// If necessary, the schema described in  the module
     /// comments are created.
@@ -175,14 +258,17 @@ impl KilnDatabase {
     /// *  path : &str - the path to the database file.
     ///  ### Returns:
     ///   Result<KilnDatabase, Error>
-    fn new(path : &str) -> result::Result<KilnDatabase, Error> {
+    fn new(path : &str) -> result::Result<KilnDatabase, DatabaseError> {
         let result = rusqlite::Connection::open(path);
         match result {
-            Ok(db) => {
+            Ok(mut db) => {
+                if let Err(e) = Self::make_schema(&mut db) {
+                    return Err(DatabaseError::SqlError(e))
+                }
                 return Ok(KilnDatabase {db : db})
             },
             Err(e) => return {
-                Err(Error::SqlError(e))
+                Err(DatabaseError::SqlError(e))
             }
         };
         
@@ -192,10 +278,35 @@ impl KilnDatabase {
 #[cfg(test)]
 mod KilnDatabaseTests {
     use super::*;
-
+    fn has_table(db: &mut rusqlite::Connection, name: &str) -> bool {
+        let stmt = db.prepare("
+        SELECT COUNT(*) FROM sqlite_schema
+            WHERE type = 'table' AND name =?
+        ");
+        let mut  stmt = stmt.unwrap();
+        let mut rows = stmt.query([name]).unwrap();    // probably 0.
+        let row = rows.next().unwrap().unwrap();
+        let count : u64 = row.get_unwrap(0);
+        count == 1
+    }
     #[test]
     fn new_1() {
         let result = KilnDatabase::new(":memory:");
         assert!(result.is_ok());
+    }
+    #[test]
+    fn schema_1() {
+        let result = KilnDatabase::new(":memory:");
+        let mut db = result.unwrap().db;
+
+
+        // The tables should exist.
+
+        assert!(has_table(&mut db, "Kilns"));
+        assert!(has_table(&mut db, "Firing_sequences"));
+        assert!(has_table(&mut db, "Firing_steps"));
+        assert!(has_table(&mut db, "Projects"));
+        assert!(has_table(&mut db, "Project_firings"));
+        assert!(has_table(&mut db, "Project_images"));
     }
 }
