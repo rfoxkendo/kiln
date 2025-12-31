@@ -206,11 +206,11 @@ impl KilnDatabase {
     fn make_schema(db: &mut rusqlite::Connection) -> result::Result<(), rusqlite::Error> {
         // Kilns:
         if let Err(e) = db.execute(
-            r#" CREATE TABLE IF NOT EXISTS Kilns (
+            " CREATE TABLE IF NOT EXISTS Kilns (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            name         TEXT        -- name of kiln.
+            name         TEXT,        -- name of kiln.
             description  TEXT -- describes the kiln.
-         )"#, 
+         )", 
             []
         ) {
             return Err(e);
@@ -303,6 +303,31 @@ impl KilnDatabase {
         };
         
     } 
+    /// Add a new kiln to the database.  Note that kiln names must be
+    /// unique
+    /// 
+    /// ### Parameters:
+    ///     name : name of the new kiln, must be unique.
+    ///     description : Description of the new kiln.  Free text.
+    /// ### Returns:
+    ///         Result<(), DatabaseError>
+    /// 
+    fn add_kiln(&mut self, name : &str, description: &str) -> result::Result<(), DatabaseError> {
+        let  stmt = self.db.prepare(
+            "INSERT INTO Kilns (name, description) VALUES(?, ?)"
+        );
+        if let Err(e) = stmt {
+            print!("{}", e);
+            return Err(DatabaseError::SqlError(e));
+        }
+        let mut stmt = stmt.unwrap();
+        if let Err(e) = stmt.execute([name, description]) {
+            print!("{}", e);
+            Err(DatabaseError::SqlError(e))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -338,6 +363,37 @@ mod KilnDatabaseTests {
         assert!(has_table(&mut db, "Projects"));
         assert!(has_table(&mut db, "Project_firings"));
         assert!(has_table(&mut db, "Project_images"));
+    }
+    #[test]
+    fn add_kiln_1() {
+        // Can add a kiln to the database:
+
+        let mut database = KilnDatabase::new(":memory:")
+            .unwrap();
+        let result = database.add_kiln("Kiln1", "Large-ish kiln on 120V");
+        assert!(result.is_ok());
+
+        // The database must have the kiln and only that kiln.
+
+        let mut stmt = database.db.prepare(
+            "SELECT id, name, description FROM Kilns").unwrap();
+        let mut rows = stmt.query([]).unwrap();
+        let row = rows.next().unwrap();
+        assert!(row.is_some());
+        let row = row.unwrap();
+
+        let id : u64 = row.get_unwrap(0);
+        let name : String = row.get_unwrap(1);
+        let description : String = row.get_unwrap(2);
+
+        assert_eq!(id, 1);
+        assert_eq!(name, "Kiln1");
+        assert_eq!(description, "Large-ish kiln on 120V");
+
+        // should be no other wrows:
+
+        assert!(rows.next().unwrap().is_none());
+
     }
 }
 
