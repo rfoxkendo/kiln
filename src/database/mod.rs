@@ -1026,5 +1026,64 @@ mod kiln_program_tests {
         assert_eq!(program.steps[0], steps[0]);
         assert_eq!(program.steps[1], steps[1]);
     }
+
+    // Selectors:
+
+    #[test]
+    fn kiln_1() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        assert_eq!(program.kiln(), k);
+    }
+    #[test]
+    fn sequence_1() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+
+        assert_eq!(program.sequence(), seq);
+    }
+    #[test]
+    fn steps() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        let s = program.steps();
+        assert_eq!(program.steps, s);
+    }
     
 }
