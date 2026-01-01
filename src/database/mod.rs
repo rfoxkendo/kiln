@@ -182,6 +182,7 @@ pub struct KilnProject {
 pub enum DatabaseError {
     SqlError(rusqlite::Error),
     DuplicateName(String),
+    NoSuchName(String),
     FailedDeserialization(String),
     Unimplemented,
 }
@@ -191,6 +192,7 @@ impl Display for DatabaseError {
     match self {
         DatabaseError::SqlError(e) => write!(f, "{}", e),
         DatabaseError::DuplicateName(name) => write!(f, "Duplicate name: {}", name),
+        DatabaseError::NoSuchName(name) => write!(f, "No such name: {}", name),
         DatabaseError::FailedDeserialization(s) => write!(f, "Failed to deserialize a {}", s),
         DatabaseError::Unimplemented => write!(f, "This operation is not yet implemented")
     }
