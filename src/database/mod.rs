@@ -182,6 +182,7 @@ pub struct KilnProject {
 pub enum DatabaseError {
     SqlError(rusqlite::Error),
     DuplicateName(String),
+    FailedDeserialization(String),
     Unimplemented,
 }
 
@@ -190,6 +191,7 @@ impl Display for DatabaseError {
     match self {
         DatabaseError::SqlError(e) => write!(f, "{}", e),
         DatabaseError::DuplicateName(name) => write!(f, "Duplicate name: {}", name),
+        DatabaseError::FailedDeserialization(s) => write!(f, "Failed to deserialize a {}", s),
         DatabaseError::Unimplemented => write!(f, "This operation is not yet implemented")
     }
  }   
@@ -298,7 +300,8 @@ impl KilnDatabase {
     ///  ### Parameters:
     /// *  path : &str - the path to the database file.
     ///  ### Returns:
-    ///   Result<KilnDatabase, Error>
+    ///    
+    /// a Result that contains the new kiln data base on success.
     pub fn new(path : &str) -> result::Result<KilnDatabase, DatabaseError> {
         let result = rusqlite::Connection::open(path);
         match result {
@@ -311,7 +314,7 @@ impl KilnDatabase {
             Err(e) => return {
                 Err(DatabaseError::SqlError(e))
             }
-        };
+        }
         
     } 
     /// Add a new kiln to the database.  Note that kiln names must be
@@ -321,8 +324,8 @@ impl KilnDatabase {
     ///  *   name : name of the new kiln, must be unique.
     ///  *   description : Description of the new kiln.  Free text.
     /// ### Returns:
-    ///         Result<(), DatabaseError>
     /// 
+    /// If successful, nothing is returned.ss
     pub fn add_kiln(&mut self, name : &str, description: &str) -> result::Result<(), DatabaseError> {
         if self.get_count("SELECT COUNT(*) FROM Kilns WHERE name = ?", [name]) != 0 {
             return Err(DatabaseError::DuplicateName(String::from(name)));
@@ -348,7 +351,9 @@ impl KilnDatabase {
     /// ### Parameters:
     ///   * name - name of the kiln to fetch.
     /// ### Returns:
-    ///    Result<Option<Kiln>, DatabaseError>
+    ///   
+    /// An option containing the fetched kiln on success.  Note that None is returned if
+    /// a successful query returned nothing.
     /// 
     pub fn get_kiln(&mut self, name : &str) -> result::Result<Option<Kiln>, DatabaseError> {
         let stmt = self
@@ -373,14 +378,45 @@ impl KilnDatabase {
             Ok(None)
         } else {
             let row = row.unwrap();
-            let name : String = row.get_unwrap(1);
-            let description : String = row.get_unwrap(2);
-            Ok(Some(Kiln::new(
-                row.get_unwrap(0), &name, &description
-            )))
+            let result = from_row::<Kiln>(&row);
+            if let Ok(k) = result {
+                Ok(Some(k))
+            } else {
+                Err(DatabaseError::FailedDeserialization(String::from("Kiln")))
+            }
+            
         }
 
 
+    }
+    ///  List the names of all the kilns in the database.
+    /// 
+    /// ### Returns:
+    /// 
+    /// On success a vector containing the names of all kilns found.
+    /// The kiln names are in ascending lexical order.
+    pub fn list_kilns(&mut self) -> result::Result<Vec<String>, DatabaseError> {
+        let stmt = self.db.prepare(
+            "SELECT name FROM Kilns ORDER BY name ASC"
+        );
+        if let Err(sqle) = stmt {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut stmt = stmt.unwrap();
+        let rows = stmt.query([]);
+        if let Err(sqle) = rows {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut result = vec![];
+        let mut rows = rows.unwrap();
+        while let Ok(r) = rows.next() {
+            if let Some(row) = r {
+                result.push(row.get_unwrap(0));
+            } else {
+                break;
+            }
+        }
+        Ok(result)
     }
 }
 
@@ -498,7 +534,32 @@ mod kiln_database_tests {
         assert_eq!(kiln.name(), "kiln");
         assert_eq!(kiln.description(), "Some kiln");
     }
-    
+    #[test]
+    fn list_kilns_1() {
+        // No kilns to list initially:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        let result = db.list_kilns();
+
+        assert!(result.is_ok());
+        let listing = result.unwrap(); 
+        assert_eq!(listing.len(), 0);
+    }
+    #[test]
+    fn list_kilns_2() {
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("SecondKiln", "This should list second").unwrap();
+        db.add_kiln("FirstKiln", "This should list first").unwrap();
+
+        let result = db.list_kilns().unwrap();
+        assert_eq!(result.len(), 2);               // I added 2 kilns.
+
+        // THe kilns come out in lexical order:
+
+        assert_eq!(result[0], "FirstKiln");
+        assert_eq!(result[1], "SecondKiln");
+
+    }
 }
 
 #[cfg(test)]
@@ -541,4 +602,6 @@ mod kiln_tests {
         kiln.set_description("A new description for the kiln");
         assert_eq!(kiln.description, "A new description for the kiln");
     }
+
+    
 }
