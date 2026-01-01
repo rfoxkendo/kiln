@@ -117,6 +117,30 @@ pub struct KilnProgram {
     steps    : Vec<FiringStep>
 }
 
+// Implementations of all the things that make up a kiln program:
+
+impl FiringSequence {
+    /// Creates a firing sequence on a given kiln (the id of the kiln must be
+    /// known):
+    /// ### Parameters:
+    /// *  id - id of the firing sequence usually fetched  from the database.
+    /// *  name - name of the firing sequence.
+    /// *  description - what the firing sequence is for.
+    /// *  kiln_id - The id of the kiln on which the sequencde is defined.  Note
+    /// that the kiln_id will normally be gotten from the database by fetching the kiln.
+    /// 
+    /// ### Returns
+    /// A FiringSequence struct.
+    pub fn new(id: u64, name : &str, description : &str, kiln_id : u64) -> FiringSequence {
+        FiringSequence {
+            id: id, 
+            name : name.into(),
+            description : description.into(),
+            kiln_id : kiln_id
+        }
+    }
+}
+
 /// A project is a set of firing sequences
 /// and an optional set of images.
 /// The tables used to represent this in the
@@ -606,4 +630,23 @@ mod kiln_tests {
     }
 
     
+}
+#[cfg(test)]
+mod firing_sequence_tests {
+    use super::*;
+    #[test]
+    fn new_1() {
+        let seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        assert_eq!(seq,
+            FiringSequence {
+                id: 123, 
+                name:"Slump".into(), 
+                description: "Slump with no relief".into(), 
+                kiln_id: 2
+            }
+        );
+
+    }
 }
