@@ -99,13 +99,27 @@ pub struct FiringSequence {
     kiln_id : u64,
 }
 /// The steps in a firing sequence:
-/// 
+/// Note to simplify the database storage, ramp_rate is
+/// -1 if the ramp is to be AFAP.
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct FiringStep {
     id  :u64,
     sequence_id : u64,
-    ramp_rate : i32,
+    ramp_rate : i32,     
     target_temp : u32
+}
+#[derive(Clone, PartialEq, Debug)]
+enum RampRate {
+    DegPerSec(u32),
+    AFAP                 // As fast as possible
+}
+impl Display for RampRate {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match self {
+            RampRate::DegPerSec(n) => write!(f, "{}", n),
+            RampRate::AFAP => write!(f, "AFAP")
+        }
+    }
 }
 /// This convenience struct holds a full
 /// kiln program:
@@ -161,6 +175,64 @@ impl FiringSequence {
     pub fn set_description(&mut self, new_description : &str) {
         self.description = new_description.into();
     }
+}
+
+impl FiringStep {
+    /// Create a firing step...A firing step is one step in a
+    /// kiln program.
+    /// 
+    /// ### Parameters
+    /// *  id - id (usually gotten from the database)
+    /// *  sequence - The sequencde this belongs to (which FiringSequence).
+    /// *  rate  - How fast to ramp.
+    /// *  target - The target temperature.
+    /// 
+    /// ### Returns
+    /// FiringStep.
+    pub fn new(id : u64, sequence : u64, rate : RampRate, target : u32) -> FiringStep {
+        let ramp_rate = match  rate {
+            RampRate::DegPerSec(r) => r as i32,
+            RampRate::AFAP => -1         // Flag for AFAP.
+        };
+
+        FiringStep {
+            id : id, 
+            sequence_id : sequence,
+            ramp_rate : ramp_rate,
+            target_temp : target
+        }
+    }
+    // Selectors:
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+    pub fn sequence_id(&self) -> u64 {
+        self.sequence_id
+    }
+    pub fn ramp_rate(&self) -> RampRate {
+        if self.ramp_rate >= 0 {
+            RampRate::DegPerSec(self.ramp_rate as u32)
+        } else {
+            RampRate::AFAP
+        }
+    }
+    pub fn target_temp(&self) -> u32 {
+        self.target_temp
+    }
+
+    // Mutators.  Note that id and sequence_id are immutable.
+
+    pub fn set_ramp_rate(&mut self, new_rate : RampRate) {
+        match new_rate {
+            RampRate::DegPerSec(n) => self.ramp_rate = n as i32,
+            RampRate::AFAP => self.ramp_rate = -1
+        };
+    }
+    pub fn set_target_temp(&mut self, new_target : u32) {
+        self.target_temp = new_target;
+    }
+    
 }
 
 /// A project is a set of firing sequences
@@ -715,4 +787,99 @@ mod firing_sequence_tests {
         seq.set_description("Relief slump");
         assert_eq!(seq.description, "Relief slump");
     }
+}
+
+#[cfg(test)]
+mod fring_step_tests {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        // Degrees per second ramp rate.
+        let step = FiringStep::new(
+            12, 34, RampRate::DegPerSec(300), 900
+        );
+    
+    assert_eq!(
+        step, FiringStep {
+                id: 12, sequence_id: 34, ramp_rate: 300, target_temp: 900
+            }
+        );
+    }
+    #[test]
+    fn new_2() {
+        // AFAP ramp rate:
+
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900
+        );
+        assert_eq!(
+            step,  FiringStep {
+                id: 12, sequence_id: 34, ramp_rate: -1, target_temp: 900
+            }
+        )
+    }
+    // Test selectors.
+
+    #[test]
+    fn id_1() {
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900
+        );
+        assert_eq!(step.id(), 12);
+    }
+    #[test]
+    fn sequence_id_1() {
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900
+        );
+        assert_eq!(step.sequence_id(), 34);
+    }
+    #[test]
+    fn ramp_rate_1() {
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900
+        );
+        assert_eq!(step.ramp_rate(), RampRate::AFAP);
+    }
+    #[test]
+    fn ramp_rate_2() {
+        let step = FiringStep::new(
+            12, 34, RampRate::DegPerSec(300), 900
+        );
+        assert_eq!(step.ramp_rate(), RampRate::DegPerSec(300));
+    }
+    #[test]
+    fn target_temp() {
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900
+        );
+        assert_eq!(step.target_temp(), 900);
+    }
+    // Test mutators:
+    #[test]
+    fn set_ramp_1() {
+        let mut step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900
+        );
+        step.set_ramp_rate(RampRate::DegPerSec(300));
+        assert_eq!(step.ramp_rate(), RampRate::DegPerSec(300));
+    }
+    #[test]
+    fn set_ramp_2() {
+        let mut  step = FiringStep::new(
+            12, 34, RampRate::DegPerSec(300), 900
+        );
+        step.set_ramp_rate(RampRate::AFAP);
+        assert_eq!(step.ramp_rate(), RampRate::AFAP);
+    }
+    #[test]
+    fn set_target_1() {
+        let mut step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900
+        );
+        step.set_target_temp(1000);
+        assert_eq!(step.target_temp(), 1000);
+    }
+
 }
