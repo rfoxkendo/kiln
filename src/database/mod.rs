@@ -36,7 +36,7 @@ use rusqlite::Error;
 ///   description  TEXT -- describes the kiln.
 /// )
 /// ```
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Kiln {
     id : u64,
     name : String,
@@ -91,7 +91,7 @@ impl Kiln {
 ///    target      INTEGER
 /// )
 /// ```
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct FiringSequence {
     id : u64,
     name : String,
@@ -101,12 +101,13 @@ pub struct FiringSequence {
 /// The steps in a firing sequence:
 /// Note to simplify the database storage, ramp_rate is
 /// -1 if the ramp is to be AFAP.
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct FiringStep {
     id  :u64,
     sequence_id : u64,
     ramp_rate : i32,     
-    target_temp : u32
+    target_temp : u32,
+    dwell_time  : u32    // Minutes to hold here.  
 }
 #[derive(Clone, PartialEq, Debug)]
 enum RampRate {
@@ -124,7 +125,7 @@ impl Display for RampRate {
 /// This convenience struct holds a full
 /// kiln program:
 /// 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct KilnProgram {
     kiln : Kiln,
     sequence : FiringSequence,
@@ -189,7 +190,7 @@ impl FiringStep {
     /// 
     /// ### Returns
     /// FiringStep.
-    pub fn new(id : u64, sequence : u64, rate : RampRate, target : u32) -> FiringStep {
+    pub fn new(id : u64, sequence : u64, rate : RampRate, target : u32, dwell : u32) -> FiringStep {
         let ramp_rate = match  rate {
             RampRate::DegPerSec(r) => r as i32,
             RampRate::AFAP => -1         // Flag for AFAP.
@@ -199,7 +200,8 @@ impl FiringStep {
             id : id, 
             sequence_id : sequence,
             ramp_rate : ramp_rate,
-            target_temp : target
+            target_temp : target,
+            dwell_time : dwell
         }
     }
     // Selectors:
@@ -220,6 +222,9 @@ impl FiringStep {
     pub fn target_temp(&self) -> u32 {
         self.target_temp
     }
+    pub fn dwell_time(&self) ->u32 {
+        self.dwell_time
+    }
 
     // Mutators.  Note that id and sequence_id are immutable.
 
@@ -232,7 +237,56 @@ impl FiringStep {
     pub fn set_target_temp(&mut self, new_target : u32) {
         self.target_temp = new_target;
     }
+    pub fn set_dwell_time(&mut self, new_dwell_time : u32) {
+        self.dwell_time = new_dwell_time;
+    }
     
+}
+impl KilnProgram {
+    /// Create a new, empty kiln program.  A kil program is a firing sequencde
+    /// defined within a kiln.  A such it has a kiln description, a firing sequencde
+    /// description and associated firing steps.
+    /// 
+    /// ### Parameters
+    /// *  kiln     - the kiln that has the firing sequence.
+    /// *  sequence - the description of the firing sequence.
+    pub fn new(kiln: &Kiln, sequence: &FiringSequence) -> KilnProgram {
+        KilnProgram {
+            kiln: kiln.clone(),
+            sequence: sequence.clone(),
+            steps : Vec::new()
+        }
+    }
+    // selectors - note these return clones...
+    // There are no mutators other than the methods that add steps.
+    pub fn kiln(&self) -> Kiln {
+        return self.kiln.clone();
+    }
+    pub fn sequence(&self) -> FiringSequence {
+        return self.sequence.clone();
+    }
+    pub fn steps(&self) -> Vec<FiringStep> {
+        return self.steps.clone();
+    }
+
+    /// Add a single step to the program.  Note we assume that the ids in the step are correct.
+    /// 
+    /// ### Parameters
+    /// *  step - a Step to add to the program.
+    
+    pub fn add_step(&mut self, step : &FiringStep) {
+        self.steps.push(step.clone());
+    }
+    /// add Several steps:
+    /// 
+    /// ### Parameters:
+    /// * steps the steps to add.
+    
+    pub fn add_steps(&mut self, steps: &Vec<FiringStep>) {
+        for step in steps {
+            self.add_step(step);
+        }
+    }
 }
 
 /// A project is a set of firing sequences
@@ -797,12 +851,12 @@ mod fring_step_tests {
     fn new_1() {
         // Degrees per second ramp rate.
         let step = FiringStep::new(
-            12, 34, RampRate::DegPerSec(300), 900
+            12, 34, RampRate::DegPerSec(300), 900, 10
         );
     
     assert_eq!(
         step, FiringStep {
-                id: 12, sequence_id: 34, ramp_rate: 300, target_temp: 900
+                id: 12, sequence_id: 34, ramp_rate: 300, target_temp: 900, dwell_time: 10
             }
         );
     }
@@ -811,11 +865,11 @@ mod fring_step_tests {
         // AFAP ramp rate:
 
         let step = FiringStep::new(
-            12, 34, RampRate::AFAP, 900
+            12, 34, RampRate::AFAP, 900, 10
         );
         assert_eq!(
             step,  FiringStep {
-                id: 12, sequence_id: 34, ramp_rate: -1, target_temp: 900
+                id: 12, sequence_id: 34, ramp_rate: -1, target_temp: 900, dwell_time: 10
             }
         )
     }
@@ -824,43 +878,50 @@ mod fring_step_tests {
     #[test]
     fn id_1() {
         let step = FiringStep::new(
-            12, 34, RampRate::AFAP, 900
+            12, 34, RampRate::AFAP, 900, 10
         );
         assert_eq!(step.id(), 12);
     }
     #[test]
     fn sequence_id_1() {
         let step = FiringStep::new(
-            12, 34, RampRate::AFAP, 900
+            12, 34, RampRate::AFAP, 900, 10
         );
         assert_eq!(step.sequence_id(), 34);
     }
     #[test]
     fn ramp_rate_1() {
         let step = FiringStep::new(
-            12, 34, RampRate::AFAP, 900
+            12, 34, RampRate::AFAP, 900, 10
         );
         assert_eq!(step.ramp_rate(), RampRate::AFAP);
     }
     #[test]
     fn ramp_rate_2() {
         let step = FiringStep::new(
-            12, 34, RampRate::DegPerSec(300), 900
+            12, 34, RampRate::DegPerSec(300), 900, 10
         );
         assert_eq!(step.ramp_rate(), RampRate::DegPerSec(300));
     }
     #[test]
-    fn target_temp() {
+    fn target_temp_1() {
         let step = FiringStep::new(
-            12, 34, RampRate::AFAP, 900
+            12, 34, RampRate::AFAP, 900, 10
         );
         assert_eq!(step.target_temp(), 900);
+    }
+    #[test]
+    fn dwell_time_1() {
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900, 10
+        );
+        assert_eq!(step.dwell_time(), 10);
     }
     // Test mutators:
     #[test]
     fn set_ramp_1() {
         let mut step = FiringStep::new(
-            12, 34, RampRate::AFAP, 900
+            12, 34, RampRate::AFAP, 900, 10
         );
         step.set_ramp_rate(RampRate::DegPerSec(300));
         assert_eq!(step.ramp_rate(), RampRate::DegPerSec(300));
@@ -868,7 +929,7 @@ mod fring_step_tests {
     #[test]
     fn set_ramp_2() {
         let mut  step = FiringStep::new(
-            12, 34, RampRate::DegPerSec(300), 900
+            12, 34, RampRate::DegPerSec(300), 900,10
         );
         step.set_ramp_rate(RampRate::AFAP);
         assert_eq!(step.ramp_rate(), RampRate::AFAP);
@@ -876,10 +937,37 @@ mod fring_step_tests {
     #[test]
     fn set_target_1() {
         let mut step = FiringStep::new(
-            12, 34, RampRate::AFAP, 900
+            12, 34, RampRate::AFAP, 900, 10
         );
         step.set_target_temp(1000);
         assert_eq!(step.target_temp(), 1000);
     }
+    #[test]
+    fn set_dwell_time_1() {
+          let mut step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900, 10
+        );
+        step.set_dwell_time(20);
+        assert_eq!(step.dwell_time(), 20);
+    }
 
+}
+
+
+#[cfg(test)]
+mod kiln_program_tests {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let program = KilnProgram::new(&k, &seq);
+
+        assert_eq!(program.steps.len(), 0);
+        assert_eq!(program.kiln, k);
+        assert_eq!(program.sequence, seq);
+    }   
+    // test ability to add steps first.
+    
 }
