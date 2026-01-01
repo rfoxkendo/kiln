@@ -969,5 +969,62 @@ mod kiln_program_tests {
         assert_eq!(program.sequence, seq);
     }   
     // test ability to add steps first.
+
+    #[test]
+    fn add_step_1() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step = FiringStep::new(1, 1, RampRate::DegPerSec(100), 900, 10);
+        program.add_step(&step);
+
+        assert_eq!(program.steps.len(), 1);    // There's a step.
+        assert_eq!(program.steps[0], step);
+    }
+    #[test]
+    fn add_step_2() {
+        // add a couple of steps:
+        // 
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        assert_eq!(program.steps.len(),2);    // there are 2 steps.
+
+        assert_eq!(program.steps[0], step1);
+        assert_eq!(program.steps[1], step2);
+    }
+    #[test]
+    fn add_steps_1() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        let steps = vec![step1, step2];
+        program.add_steps(&steps);
+
+        assert_eq!(program.steps.len(),2);    // there are 2 steps.
+
+        assert_eq!(program.steps[0], steps[0]);
+        assert_eq!(program.steps[1], steps[1]);
+    }
     
 }
