@@ -139,6 +139,28 @@ impl FiringSequence {
             kiln_id : kiln_id
         }
     }
+    // Selectors:
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    pub fn description(&self) -> String {
+        self.description.clone()
+    }
+    pub fn kiln_id(&self) -> u64 {
+        self.kiln_id
+    }
+    // Mutators Note the id and kiln_id are immutable.
+
+    pub fn set_name(&mut self, new_name : &str) {
+        self.name = new_name.into();
+    }
+    pub fn set_description(&mut self, new_description : &str) {
+        self.description = new_description.into();
+    }
 }
 
 /// A project is a set of firing sequences
@@ -647,6 +669,50 @@ mod firing_sequence_tests {
                 kiln_id: 2
             }
         );
-
+    }
+    // Test selectors 
+    #[test]
+    fn id_1() {
+        let seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        assert_eq!(seq.id(), 123);
+    }
+    #[test]
+    fn name_1() {
+        let seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        assert_eq!(seq.name(), "Slump");
+    }
+    #[test]
+    fn description_1() {
+        let seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        assert_eq!(seq.description(), "Slump with no relief");
+    }
+    #[test]
+    fn kiln_id() {
+        let seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        assert_eq!(seq.kiln_id(), 2);
+    }
+    #[test]
+    fn set_name_1() {
+        let mut seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        seq.set_name("Slump1");
+        assert_eq!(seq.name(), "Slump1");
+    }
+    #[test]
+    fn set_description() {
+        let mut seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        seq.set_description("Relief slump");
+        assert_eq!(seq.description, "Relief slump");
     }
 }
