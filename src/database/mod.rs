@@ -865,7 +865,7 @@ impl KilnDatabase {
         let current_program = current_program.unwrap();
 
         // The kiln and sequence must match the new program info (not the steps):
-
+        // @TODO:  Support changing the descriptions.
         if kiln != current_program.kiln() || seq != current_program.sequence() {
             return Err(DatabaseError::InconsistentProgram((kiln.name(), seq.name())));
         }
@@ -1379,7 +1379,139 @@ mod kiln_database_tests {
             assert!(false, "Expected an error got OK");
         }
     }
+    #[test]
+    fn update_kiln_program_3() {
+        // Mismatching the sequence id also fails an update:
 
+        
+        
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        // butcher the kiln id:
+
+        program_added.sequence.id += 1;  // now it's a bad id.
+
+        let update_status = db.update_kiln_program(&program_added);
+        if let Err(e) = update_status {
+            if let DatabaseError::InconsistentProgram((k, s)) = e {
+                assert_eq!(k, "Test Kiln");
+                assert_eq!(s, "Test");
+            } else {
+                assert!(false, "Expected inconstent program got: {}", e);
+            }
+        } else {
+            assert!(false, "Expected an error got OK");
+        }
+    }
+    #[test]
+    fn update_kiln_program_4() {
+        // Changing thekiln id in the sequence results inconsistent.
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        // butcher the kiln id:
+
+        program_added.sequence.kiln_id += 1;  // now it's a bad id.
+
+        let update_status = db.update_kiln_program(&program_added);
+        if let Err(e) = update_status {
+            if let DatabaseError::InconsistentProgram((k,s)) = e {
+                assert_eq!(k, "Test Kiln");
+                assert_eq!(s, "Test");
+            } else {
+                assert!(false, "Expected inconsistent program  program got: {}", e);
+            }
+        } else {
+            assert!(false, "Expected an error got OK");
+        }
+    }
+    #[test]
+    fn update_kiln_program_5() {
+        // Changing the kiln name gives no such program..
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        // butcher the kiln id:
+
+        program_added.kiln.name = String::from("no such kiln");
+
+        let update_status = db.update_kiln_program(&program_added);
+        if let Err(e) = update_status {
+            if let DatabaseError::NoSuchProgram((k,s)) = e {
+                assert_eq!(k, "no such kiln");
+                assert_eq!(s, "Test");
+            } else {
+                assert!(false, "Expected No Such program got: {}", e);
+            }
+        } else {
+            assert!(false, "Expected an error got OK");
+        }
+
+    }
+    #[test]
+    fn update_kiln_program_6() {
+        // CHangint the seq name is also bad:
+
+         let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        // butcher the kiln id:
+
+        program_added.sequence.name = String::from("no such program");
+
+        let update_status = db.update_kiln_program(&program_added);
+        if let Err(e) = update_status {
+            if let DatabaseError::NoSuchProgram((k,s)) = e {
+                assert_eq!(k, "Test Kiln");
+                assert_eq!(s, "no such program");
+            } else {
+                assert!(false, "Expected No Such program got: {}", e);
+            }
+        } else {
+            assert!(false, "Expected an error got OK");
+        }
+
+
+    }
 }
 
 #[cfg(test)]
