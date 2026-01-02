@@ -798,10 +798,15 @@ impl KilnDatabase {
         let mut kiln_program = KilnProgram::new(&kiln, &program);
 
         // Now we need to fetch rows firing_steps with our program id.
+        // ASs are needed to make serde able to deserialize :
 
         let stmt = self.db.prepare(
-            "SELECT id, sequence_id, ramp, target, hold FROM Firing_steps
-                WHERE sequence_id = ? ORDER BY id ASC"
+            "SELECT id, sequence_id, 
+                            ramp AS ramp_rate, 
+                            target AS target_temp,
+                             hold AS dwell_time 
+                    FROM Firing_steps
+                    WHERE sequence_id = ? ORDER BY id ASC"
         );
         if let Err(sqle) =stmt {
             return Err(DatabaseError::SqlError(sqle));
@@ -815,7 +820,7 @@ impl KilnDatabase {
         while let Ok(r) = rows.next() {
             if let Some(row) = r {
                 let step =  from_row::<FiringStep>(&row);
-                if let Err(_) = step {
+                if let Err(e) = step {
                     return Err(DatabaseError::FailedDeserialization("FiringStep".into()));
                 }
                 // Add the step to the program:
@@ -1511,6 +1516,32 @@ mod kiln_database_tests {
         }
 
 
+    }
+    #[test]
+    fn update_kiln_program_7() {
+        // The resulting program can be gotten properly after a step is added:
+
+         let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        let update_status = db.update_kiln_program(&program_added);
+        assert!(update_status.is_ok());
+        let updated_program = update_status.unwrap();
+
+        let got_program = db
+            .get_kiln_program("Test Kiln", "Test")
+            .unwrap().unwrap();
+
+        assert_eq!(got_program, updated_program);    // Should be the same!
     }
 }
 
