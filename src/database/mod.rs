@@ -397,6 +397,7 @@ pub enum DatabaseError {
     InvalidIndex(usize),
     FailedDeserialization(String),
     NoSuchProgram((String, String)),
+    InconsistentProgram((String, String)),
     Unimplemented,
 }
 
@@ -410,6 +411,8 @@ impl Display for DatabaseError {
         DatabaseError::FailedDeserialization(s) => write!(f, "Failed to deserialize a {}", s),
         DatabaseError::NoSuchProgram((kiln, program)) =>
             write!(f, "Kiln {} has no program named {}", kiln, program),
+        DatabaseError::InconsistentProgram((kiln, seq))=>
+            write!(f, "Input kiln ({}) program ({}) is inconsistent with database", kiln, seq),
         DatabaseError::Unimplemented => write!(f, "This operation is not yet implemented")
     }
  }   
@@ -840,9 +843,95 @@ impl KilnDatabase {
     /// ### Returns:
     /// Result<KilnProgram, DatabaseError>  -  On success, the updated kiln program is returned....with
     /// the step ids matching the ones in the database.
+    /// 
+    /// ### Notes:
+    /// *  The kiln name and id are validated.
+    /// *  The kiln program name and Id are validated.
     
     pub fn update_kiln_program(&mut self, program : KilnProgram) -> result::Result<KilnProgram, DatabaseError> {
-        Err(DatabaseError::Unimplemented)
+        // Validate the kiln:
+
+        let kiln= program.kiln();
+        let seq = program.sequence();
+
+        let current_program = self.get_kiln_program(&kiln.name(), &seq.name());
+        if let Err(e) = current_program {
+            return Err(e);
+        }
+        let current_program =current_program.unwrap();
+        if let None = current_program {
+            return Err(DatabaseError::NoSuchProgram((kiln.name(), seq.name())));
+        }
+        let current_program = current_program.unwrap();
+
+        // The kiln and sequence must match the new program info (not the steps):
+
+        if kiln != current_program.kiln() || seq != current_program.sequence() {
+            return Err(DatabaseError::InconsistentProgram((kiln.name(), seq.name())));
+        }
+        
+        // start a transaction if there are errors we'll abort it:
+
+        let t = self.db.transaction();
+        if let Err(sqle) =t {
+            return Err(DatabaseError::SqlError(sqle));
+        } 
+        let mut t = t.unwrap();
+        t.set_drop_behavior(rusqlite::DropBehavior::Rollback);
+        // Kill off the existing steps:
+
+        let existing_steps = current_program.steps();
+        let mut existing_step_ids = Vec::<u64>::new();
+        for step in existing_steps {
+            existing_step_ids.push(step.id());
+        }
+        let del_sql= format!("DELETE FROM Firing_steps WHERE id in({})",
+            existing_step_ids.iter().map(|_| String::from("? ")).collect::<Vec<String>>().join(", "));
+        let del_status = t.execute(
+            &del_sql,
+            rusqlite::params_from_iter(existing_step_ids)
+        );
+        if let Err(sqle) = del_status {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        // Add in the new rows
+
+        let mut resulting_program = KilnProgram::new(&kiln, &seq);    // So we can modify the step ids.
+        {
+            let step_sql = t.prepare (
+                "INSERT INTO Firing_steps sequence_id, ramp, target, hold 
+                    VALUES (?, ?, ?, ?)"
+            );
+            if let Err(sqle) = step_sql {
+                return Err(DatabaseError::SqlError(sqle));
+            }
+            let mut step_sql = step_sql.unwrap();
+            let seqid = seq.id();                      // Notationally convenient.
+            for step in program.steps() {
+                let ramp = if let RampRate::DegPerSec(n) = step.ramp_rate() {
+                    n as i32
+                } else {
+                    -1
+                };
+                let status = step_sql.execute(
+                    [seqid, ramp as u64 , step.target_temp() as u64 , step.dwell_time() as u64]
+                );
+                if let Err(sqle) = status {
+
+                    return Err(DatabaseError::SqlError(sqle));
+                } else {
+                    let final_step = FiringStep::new(
+                            t.last_insert_rowid() as u64, seqid, step.ramp_rate(), step.target_temp(), step.dwell_time()
+                        );
+                    resulting_program.add_step(&final_step);
+                }
+
+            }
+        }
+        if let Err(sqle) = t.commit() {
+            return Err(DatabaseError::SqlError(sqle));
+        }     // 'must' succeed but...
+        Ok(resulting_program)
     }
 }
 
