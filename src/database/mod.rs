@@ -752,7 +752,7 @@ impl KilnDatabase {
     /// ### Returns:
     /// Result<Option<KilnProgram>, DatabaseError> - on success the option:
     /// * is None if there's no matching program.
-    /// Note: The kiln name is verified.
+    /// Note: The kiln name is not verified.
     /// 
     pub fn get_kiln_program(
         &mut self, kiln_name : &str, program_name : &str) -> result::Result<Option<KilnProgram>, DatabaseError> {
@@ -1257,6 +1257,33 @@ mod kiln_database_tests {
 
         assert_eq!(names2[0], "Only Program")
 
+    }
+    // Tests for getting empty programs.
+    // We need to test update_kiln_program to test get with programs that are not empty in the DB.
+    #[test]
+    fn get_empty_1() {
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        // No such program to get give me Ok(None);
+
+        let program = db.get_kiln_program("Test Kiln", "no program");
+        assert!(program.is_ok());
+        let program = program.unwrap();
+
+        assert!(program.is_none());
+    }
+    #[test]
+    fn get_empty_2() {
+        // No such kiln also gives a None:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let program = db.get_kiln_program("No such", "program");
+        assert!(program.is_ok());
+        let program =program.unwrap();
+        assert!(program.is_none());
     }
 }
 
