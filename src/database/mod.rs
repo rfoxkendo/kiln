@@ -25,7 +25,6 @@ use serde::{Deserialize, Serialize};
 use serde_rusqlite::*;
 use std::fmt::{Display, Result, Formatter};
 use std::result;
-use rusqlite::Error;
 
 /// This structure  represents a Kiln. In Sqlite, it will
 /// be represented as:
@@ -110,7 +109,7 @@ pub struct FiringStep {
     dwell_time  : u32    // Minutes to hold here.  
 }
 #[derive(Clone, PartialEq, Debug)]
-enum RampRate {
+pub enum RampRate {
     DegPerSec(u32),
     AFAP                 // As fast as possible
 }
@@ -823,7 +822,7 @@ impl KilnDatabase {
         while let Ok(r) = rows.next() {
             if let Some(row) = r {
                 let step =  from_row::<FiringStep>(&row);
-                if let Err(e) = step {
+                if let Err(_) = step {
                     return Err(DatabaseError::FailedDeserialization("FiringStep".into()));
                 }
                 // Add the step to the program:
