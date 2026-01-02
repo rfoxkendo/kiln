@@ -241,6 +241,47 @@ impl FiringStep {
     }
     
 }
+
+impl Project {
+    /// Create a new project.
+    /// 
+    /// ### Parameters:
+    /// id - Id in the database.
+    /// name of the project - should be unique
+    /// description - Describes the project.
+    /// 
+    pub fn new(id : u64, name : &str, description : &str) -> Project {
+        Project {
+            id : id, 
+            name : name.into(),
+            description : description.into()
+        }
+    }
+    // Selectors:
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    pub fn description(&self) -> String {
+        self.description.clone()
+    }
+
+    // Mutators - we don't provide a public method to change the id as it's an immutable
+    // database thing
+
+    pub fn set_name(&mut self, new_name: &str) -> &mut Project{
+        self.name = new_name.into();
+        self
+    }
+    pub fn set_description(&mut self, new_desc : &str) -> &mut Project {
+        self.description = new_desc.into();
+        self
+    }
+
+}
 impl KilnProgram {
     /// Create a new, empty kiln program.  A kil program is a firing sequencde
     /// defined within a kiln.  A such it has a kiln description, a firing sequencde
@@ -2133,4 +2174,16 @@ mod kiln_program_tests {
 
     }
 
+}
+#[cfg(test)]
+mod project {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        let project =Project::new(1, "Test Project", "A test project");
+        assert_eq!(
+            project, Project { id: 1, name: "Test Project".into(), description: "A test project".into()}
+        );
+    }
 }
