@@ -1285,6 +1285,29 @@ mod kiln_database_tests {
         let program =program.unwrap();
         assert!(program.is_none());
     }
+    #[test]
+    fn get_empty_3() {
+        // Empty existing program:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+        
+        let program_gotten = db.get_kiln_program("Test Kiln", "Test");
+        assert!(program_gotten.is_ok());
+        let program_gotten = program_gotten.unwrap();
+        if let Some(got) = program_gotten {
+            assert_eq!(got.kiln(), program_added.kiln());
+            assert_eq!(got.sequence(), program_added.sequence());
+            assert_eq!(got.steps.len(), 0);
+        } else {
+            assert!(false, "Expected to fetch a program");
+        }
+    }
 }
 
 #[cfg(test)]
