@@ -396,6 +396,7 @@ pub enum DatabaseError {
     NoSuchName(String),
     InvalidIndex(usize),
     FailedDeserialization(String),
+    NoSuchProgram((String, String)),
     Unimplemented,
 }
 
@@ -407,6 +408,8 @@ impl Display for DatabaseError {
         DatabaseError::NoSuchName(name) => write!(f, "No such name: {}", name),
         DatabaseError::InvalidIndex(n) => write!(f, "Invalid index {}", n),
         DatabaseError::FailedDeserialization(s) => write!(f, "Failed to deserialize a {}", s),
+        DatabaseError::NoSuchProgram((kiln, program)) =>
+            write!(f, "Kiln {} has no program named {}", kiln, program),
         DatabaseError::Unimplemented => write!(f, "This operation is not yet implemented")
     }
  }   
@@ -452,7 +455,8 @@ impl KilnDatabase {
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
                     sequence_id INTEGER,  -- FK to Firing_sequences
                     ramp       INTEGER, -- -1 means AFAP.
-                    target     INTEGER
+                    target     INTEGER,
+                    hold       INTEGER
                 )",
             []
         ) {
@@ -750,7 +754,77 @@ impl KilnDatabase {
     pub fn get_kiln_program(
         &mut self, kiln_name : &str, program_name : &str) -> result::Result<Option<KilnProgram>, DatabaseError> {
         
-        Err(DatabaseError::Unimplemented)
+        // Get the definition without the steps:
+
+        let stmt = self.db.prepare(
+            "SELECT Kilns.id, Kilns.description, 
+                    Firing_sequences.id, Firing_sequences.description
+                 FROM Kilns
+                 INNER JOIN Firing_sequences ON Firing_sequences.kiln_id = Kilns.id
+                 WHERE Kilns.name = ? AND Firing_sequences.name = ?"
+        );
+        if let Err(sqle) = stmt {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut stmt = stmt.unwrap();
+        let rows = stmt.query([kiln_name, program_name]);
+        if let Err(sqle) = rows {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut rows = rows. unwrap();
+        let row = rows.next();                              // Only one match allowed...
+        if let Err(sqle) = row {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let row = row.unwrap();
+        if let None = row {
+            return Ok(None);
+        }
+        let row = row.unwrap();
+
+        // Deser can't do such a nice compound I think?
+        let kiln_desc : String = row.get_unwrap(1);
+        let kiln = Kiln::new(
+            row.get_unwrap(0), kiln_name, &kiln_desc
+        );
+    
+        let fs_desc : String = row.get_unwrap(3);
+        let program = FiringSequence::new(
+            row.get_unwrap(2), &program_name, &fs_desc, kiln.id()
+        );
+        let mut kiln_program = KilnProgram::new(&kiln, &program);
+
+        // Now we need to fetch rows firing_steps with our program id.
+
+        let stmt = self.db.prepare(
+            "SELECT id, sequence_id, ramp, target, hold FROM Firing_steps
+                WHERE sequence_id = ? ORDER BY id ASC"
+        );
+        if let Err(sqle) =stmt {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut stmt = stmt.unwrap();
+        let rows = stmt.query([program.id()]);
+        if let Err(sqle) = rows {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut rows = rows.unwrap(); 
+        while let Ok(r) = rows.next() {
+            if let Some(row) = r {
+                let step =  from_row::<FiringStep>(&row);
+                if let Err(_) = step {
+                    return Err(DatabaseError::FailedDeserialization("FiringStep".into()));
+                }
+                // Add the step to the program:
+                let step = step.unwrap();
+                kiln_program.add_step(&step);
+            } else {
+                break;                   // NO more rows.ss
+            }
+        }
+
+        Ok(Some(kiln_program))
+
     }
     /// Update the steps associated with a kiln program.  Note this is
     /// a transaction which 
