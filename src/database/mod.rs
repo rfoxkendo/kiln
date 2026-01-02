@@ -260,13 +260,17 @@ impl KilnProgram {
     // selectors - note these return clones...
     // There are no mutators other than the methods that add steps.
     pub fn kiln(&self) -> Kiln {
-        return self.kiln.clone();
+        self.kiln.clone()
     }
     pub fn sequence(&self) -> FiringSequence {
-        return self.sequence.clone();
+        self.sequence.clone()
     }
     pub fn steps(&self) -> Vec<FiringStep> {
-        return self.steps.clone();
+        self.steps.clone()
+    }
+    /// Number of steps in the program.
+    pub fn len(&self) -> usize {
+        self.steps.len()
     }
 
     /// Add a single step to the program.  Note we assume that the ids in the step are correct.
@@ -285,6 +289,41 @@ impl KilnProgram {
     pub fn add_steps(&mut self, steps: &Vec<FiringStep>) {
         for step in steps {
             self.add_step(step);
+        }
+    }
+    ///
+    /// Remove a step from a program given its step number.
+    /// 
+    /// ### Parameters
+    /// * step - step number to remove
+    /// ### Returns
+    /// Result<(), DatabaseError>  InvalidIndex is the only Error that can be returned.
+    
+    pub fn remove_step(&mut self, step : usize) -> result::Result<(), DatabaseError> {
+        if step < self.steps.len() {
+            self.steps.remove(step);
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(step))
+        }
+    }
+    ///
+    /// Insert a step at a specific position in the step list.
+    /// 
+    /// ### Parameters:
+    /// * step - reference to the step to clone into position.
+    /// * index - Where to put the step.  0 means at the beginning and
+    ///           len at the end.
+    /// 
+    /// ### Returns
+    /// Result<(), DatabaseError> InvalidIndex is the only error that can be returned.
+    
+    pub fn insert_step(&mut self, step : &FiringStep, index : usize) -> result::Result<(), DatabaseError> {
+        if index <= self.steps.len() {
+            self.steps.insert(index, step.clone());
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(index))
         }
     }
 }
@@ -355,6 +394,7 @@ pub enum DatabaseError {
     SqlError(rusqlite::Error),
     DuplicateName(String),
     NoSuchName(String),
+    InvalidIndex(usize),
     FailedDeserialization(String),
     Unimplemented,
 }
@@ -365,6 +405,7 @@ impl Display for DatabaseError {
         DatabaseError::SqlError(e) => write!(f, "{}", e),
         DatabaseError::DuplicateName(name) => write!(f, "Duplicate name: {}", name),
         DatabaseError::NoSuchName(name) => write!(f, "No such name: {}", name),
+        DatabaseError::InvalidIndex(n) => write!(f, "Invalid index {}", n),
         DatabaseError::FailedDeserialization(s) => write!(f, "Failed to deserialize a {}", s),
         DatabaseError::Unimplemented => write!(f, "This operation is not yet implemented")
     }
@@ -1067,7 +1108,7 @@ mod kiln_program_tests {
         assert_eq!(program.sequence(), seq);
     }
     #[test]
-    fn steps() {
+    fn steps_1() {
         let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
         let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
         let mut program = KilnProgram::new(&k, &seq);
@@ -1085,5 +1126,204 @@ mod kiln_program_tests {
         let s = program.steps();
         assert_eq!(program.steps, s);
     }
-    
+    #[test]
+    fn len_1() {
+        // Initially, there are no steps:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let program = KilnProgram::new(&k, &seq);
+
+        assert_eq!(program.len(), 0);
+    }
+    #[test]
+    fn len_2() {
+        // after adding steps, len is correct:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        assert_eq!(program.len(), 2);
+    }
+    // Program editing methods.
+    #[test]
+    fn remove_1() {
+        // Remove invalid step:
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        // Valid indices are 0,1:
+
+        let result = program.remove_step(2);              // Invalid step:
+        if let Err(e) = result {
+            if let DatabaseError::InvalidIndex(n) = e {
+                assert_eq!(n, 2);
+            } else {
+                assert!(false, "Not the right error type");
+            }
+        } else {
+            assert!(false, "Expected Err got Ok");                     // Must be an error:
+        }
+
+
+    }
+    #[test]
+    fn remove_2() {
+        // Valid removal:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        assert!(program.remove_step(0).is_ok());
+
+        let steps = program.steps();
+        assert_eq!(steps.len(), 1);    // Only one step left and...
+        assert_eq!(steps[0], step2);    // It's step 2.
+    }
+    #[test]
+    fn insert_1() {
+        // Insert with an invalid index:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        let step3 = FiringStep::new(2, 1, RampRate::AFAP,100, 10);
+
+        let result = program.insert_step(&step3, 3);  // invalid index.
+        if let Err(e) = result {
+            if let DatabaseError::InvalidIndex(n) = e {
+                assert_eq!(n, 3);
+            } else {
+                assert!(false, "Incorrect error type");
+            }
+        } else {
+            assert!(false, "Exepcted err");
+        }
+    }
+    #[test]
+    fn insert_2() {
+        // Insert at beginning:
+
+        
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        let step3 = FiringStep::new(2, 1, RampRate::AFAP,100, 10);
+
+        assert!(program.insert_step(&step3, 0).is_ok());
+        assert_eq!(program.len(), 3);
+        let steps = program.steps();
+        assert_eq!(steps[0], step3);
+
+    }
+    #[test]
+    fn insert_3() {
+        // Insert at end:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        let step3 = FiringStep::new(2, 1, RampRate::AFAP,100, 10);
+
+        assert!(program.insert_step(&step3, 2).is_ok());
+        assert_eq!(program.len(), 3);
+        let steps = program.steps();
+        assert_eq!(steps[2], step3);
+
+    }
+    #[test]
+    fn insert_4() {
+        // insert in the middle between steps 0 and 1:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        let step3 = FiringStep::new(2, 1, RampRate::AFAP,100, 10);
+
+        assert!(program.insert_step(&step3, 1).is_ok());
+        assert_eq!(program.len(), 3);
+        let steps = program.steps();
+        assert_eq!(steps[1], step3);
+        assert_eq!(steps[0], step1);
+        assert_eq!(steps[2], step2);
+
+    }
+
 }
