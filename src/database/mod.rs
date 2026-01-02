@@ -695,6 +695,81 @@ impl KilnDatabase {
 
         
     }
+    /// List the names of the kin programs defineed on a kiln:
+    /// 
+    /// ### Paramteers:
+    /// kiln - name of the kiln for which program are listed.
+    /// 
+    /// ### Returns:
+    /// Result<Vec<String>, DatabaseError>  - on success, the vector lists the names of the
+    /// programs in lexical order by name.
+    /// 
+    /// #### Note:
+    ///    It is not an error for the kiln to not exist... in that case, a empty
+    /// vector is returned.
+    
+    pub fn list_kiln_programs(&mut self, kiln : &str) -> result::Result<Vec<String>, DatabaseError> {
+        let stmt = self.db.prepare(
+            "SELECT Firing_sequences.name FROM Firing_sequences
+                INNER JOIN Kilns ON Kilns.id = Firing_sequences.kiln_id
+                WHERE Kilns.name = ? 
+                ORDER BY Firing_sequences.name ASC"
+        );
+        if let Err(sqle) = stmt {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut stmt = stmt.unwrap();
+        let rows = stmt.query([kiln]);
+        if let Err(sqle) = rows {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut rows = rows.unwrap();
+        let mut result : Vec<String> = Vec::new();
+        while let Ok(r) = rows.next() {
+            if let Some(row) = r {
+                result.push(row.get_unwrap(0));
+            } else {
+                break;
+            }
+        }
+
+        Ok(result)
+        
+    }
+    /// Fetch a kiln program on a kiln.
+    /// 
+    /// ### Parameters:
+    /// *  kiln_name - name of the kiln.
+    /// *  program_name - name of the kiln program.
+    /// 
+    /// ### Returns:
+    /// Result<Option<KilnProgram>, DatabaseError> - on success the option:
+    /// * is None if there's no matching program.
+    /// Note: The kiln name is verified.
+    /// 
+    pub fn get_kiln_program(
+        &mut self, kiln_name : &str, program_name : &str) -> result::Result<Option<KilnProgram>, DatabaseError> {
+        
+        Err(DatabaseError::Unimplemented)
+    }
+    /// Update the steps associated with a kiln program.  Note this is
+    /// a transaction which 
+    /// -  Removes previously existing steps defined for the program.
+    /// -  Inserts the new steps for the program.
+    /// In the end, the ids of the steps in the KilnProgram are updated to be correct.
+    /// This is done by replacing the full steps array.
+    /// The user's input step ids are ignored, of course.
+    /// 
+    /// ### Parameters:
+    /// *  program - references the kiln program to update. Note the kiln name and program name
+    /// are verified.
+    /// ### Returns:
+    /// Result<KilnProgram, DatabaseError>  -  On success, the updated kiln program is returned....with
+    /// the step ids matching the ones in the database.
+    
+    pub fn update_kiln_program(&mut self, program : KilnProgram) -> result::Result<KilnProgram, DatabaseError> {
+        Err(DatabaseError::Unimplemented)
+    }
 }
 
 #[cfg(test)]
@@ -936,6 +1011,89 @@ mod kiln_database_tests {
                     "Second", "Test", "A test program"
                 );
         assert!(ok.is_ok());
+    }
+    #[test]
+    fn list_programs_1() {
+        // No programs in a kiln is Ok but empty:
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let result = db.list_kiln_programs("Test Kiln");
+        assert_eq!(result.unwrap().len(), 0);   // the unwrap will fail nicely if there's an error.
+
+    }
+    #[test]
+    fn list_programs_2() {
+        // Even if the kiln does not exist it's not an error:
+        // Just empty:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        assert_eq!(
+            db.list_kiln_programs("something").unwrap().len(), 
+            0
+        );
+
+    }
+    #[test]
+    fn list_programs_3() {
+        // I can list all of the programs in a single kiln:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+        db
+            .add_kiln_program(
+                "Test Kiln", "First", "Should list first"
+            ).unwrap();
+
+        let names = db.list_kiln_programs("Test Kiln").unwrap();
+        assert_eq!(names.len(), 2);
+
+        // shouild com out first then test:
+
+        assert_eq!(names[0], "First");
+        assert_eq!(names[1], "Test");
+    }
+
+    #[test]
+    fn list_programs_4() {
+        // Can disinguish between kilns properly:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+        db.add_kiln("Second Kiln", "A second kiln").unwrap();
+
+        db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+        db
+            .add_kiln_program(
+                "Test Kiln", "First", "Should list first"
+            ).unwrap();
+        db.
+            add_kiln_program(
+                "Second Kiln",
+                "Only Program", "The onlhy program in this kiln")
+            .unwrap();
+        
+        // Two programs on the "Test Kiln" and one on the "Second Kiln"
+
+        let names1 = db.list_kiln_programs("Test Kiln").unwrap();
+        let names2 = db.list_kiln_programs("Second Kiln").unwrap();
+
+        assert_eq!(names1.len(), 2);
+        assert_eq!(names2.len(), 1);
+
+        assert_eq!(names1[0], "First");
+        assert_eq!(names1[1], "Test");
+
+        assert_eq!(names2[0], "Only Program")
+
     }
 }
 
