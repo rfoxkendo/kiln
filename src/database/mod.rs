@@ -848,7 +848,7 @@ impl KilnDatabase {
     /// *  The kiln name and id are validated.
     /// *  The kiln program name and Id are validated.
     
-    pub fn update_kiln_program(&mut self, program : KilnProgram) -> result::Result<KilnProgram, DatabaseError> {
+    pub fn update_kiln_program(&mut self, program : &KilnProgram) -> result::Result<KilnProgram, DatabaseError> {
         // Validate the kiln:
 
         let kiln= program.kiln();
@@ -899,7 +899,7 @@ impl KilnDatabase {
         let mut resulting_program = KilnProgram::new(&kiln, &seq);    // So we can modify the step ids.
         {
             let step_sql = t.prepare (
-                "INSERT INTO Firing_steps sequence_id, ramp, target, hold 
+                "INSERT INTO Firing_steps (sequence_id, ramp, target, hold) 
                     VALUES (?, ?, ?, ?)"
             );
             if let Err(sqle) = step_sql {
@@ -1261,7 +1261,7 @@ mod kiln_database_tests {
     // Tests for getting empty programs.
     // We need to test update_kiln_program to test get with programs that are not empty in the DB.
     #[test]
-    fn get_empty_1() {
+    fn get_empty_program1() {
         let mut db = KilnDatabase::new(":memory:").unwrap();
         db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
 
@@ -1274,7 +1274,7 @@ mod kiln_database_tests {
         assert!(program.is_none());
     }
     #[test]
-    fn get_empty_2() {
+    fn get_empty_program2() {
         // No such kiln also gives a None:
 
         let mut db = KilnDatabase::new(":memory:").unwrap();
@@ -1286,7 +1286,7 @@ mod kiln_database_tests {
         assert!(program.is_none());
     }
     #[test]
-    fn get_empty_3() {
+    fn get_empty_program3() {
         // Empty existing program:
 
         let mut db = KilnDatabase::new(":memory:").unwrap();
@@ -1308,6 +1308,78 @@ mod kiln_database_tests {
             assert!(false, "Expected to fetch a program");
         }
     }
+    #[test]
+    fn update_kiln_program_1() {
+        // add step ok.
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+
+        // Update the program in the database with this single step:
+
+        let updated_status = db.update_kiln_program(&program_added);
+        let updated_program = updated_status.unwrap();  // Gives good errmsg.
+
+        // The kiln and sequence should not have changed:
+
+        assert_eq!(updated_program.kiln(), program_added.kiln());
+        assert_eq!(updated_program.sequence(), program_added.sequence());
+        let steps = updated_program.steps();
+
+        // validate the single step that should be there:
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].id(), 1);    // first one added.
+        assert_eq!(steps[0].sequence_id(), updated_program.sequence().id());
+        assert_eq!(steps[0].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(steps[0].target_temp(), 1000);
+        assert_eq!(steps[0].dwell_time(), 10);
+
+
+    }
+    #[test]
+    fn update_kiln_program_2() {
+        // mismatch between kiln id fails add step:
+
+        
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        // butcher the kiln id:
+
+        program_added.kiln.id += 1;  // now it's a bad id.
+
+        let update_status = db.update_kiln_program(&program_added);
+        if let Err(e) = update_status {
+            if let DatabaseError::InconsistentProgram((k, s)) = e {
+                assert_eq!(k, "Test Kiln");
+                assert_eq!(s, "Test");
+            } else {
+                assert!(false, "Expected inconstent program got: {}", e);
+            }
+        } else {
+            assert!(false, "Expected an error got OK");
+        }
+    }
+
 }
 
 #[cfg(test)]
