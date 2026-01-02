@@ -278,18 +278,21 @@ impl KilnProgram {
     /// ### Parameters
     /// *  step - a Step to add to the program.
     
-    pub fn add_step(&mut self, step : &FiringStep) {
+    pub fn add_step(&mut self, step : &FiringStep)-> &mut KilnProgram
+    {
         self.steps.push(step.clone());
+        self
     }
     /// add Several steps:
     /// 
     /// ### Parameters:
     /// * steps the steps to add.
     
-    pub fn add_steps(&mut self, steps: &Vec<FiringStep>) {
+    pub fn add_steps(&mut self, steps: &Vec<FiringStep>)-> &mut KilnProgram {
         for step in steps {
             self.add_step(step);
         }
+        self
     }
     ///
     /// Remove a step from a program given its step number.
@@ -919,7 +922,7 @@ impl KilnDatabase {
                     -1
                 };
                 let status = step_sql.execute(
-                    [seqid, ramp as u64 , step.target_temp() as u64 , step.dwell_time() as u64]
+                    [seqid as i64, ramp as i64 , step.target_temp() as i64 , step.dwell_time() as i64]
                 );
                 if let Err(sqle) = status {
 
@@ -1542,6 +1545,43 @@ mod kiln_database_tests {
             .unwrap().unwrap();
 
         assert_eq!(got_program, updated_program);    // Should be the same!
+    }
+    #[test]
+    fn update_kiln_program_8() {
+        // Multiple steps are fine:
+
+        // The resulting program can be gotten properly after a step is added:
+
+         let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        )
+        .add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1200,  30)
+        )
+        .add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1320, 10)
+        )
+        .add_step(
+            &FiringStep::new(0, 0, RampRate::AFAP, 900, 60)
+        );
+        let update_status = db.update_kiln_program(&program_added);
+        let updated_program = update_status.unwrap();
+
+        let got_program = db
+            .get_kiln_program("Test Kiln", "Test")
+            .unwrap().unwrap();
+
+        assert_eq!(got_program, updated_program);    // Should be the same!
+
     }
 }
 
