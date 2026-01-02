@@ -375,7 +375,7 @@ pub struct ProjectFiringSteps {
 pub struct ProjectImage {
     id : u64,
     project_id : u64,
-    nme : String,
+    name : String,
     description : String,
     contents : Vec<u8>
 }
