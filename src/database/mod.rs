@@ -2186,4 +2186,19 @@ mod project {
             project, Project { id: 1, name: "Test Project".into(), description: "A test project".into()}
         );
     }
+    #[test]
+    fn id_1() {
+        let project =Project::new(1, "Test Project", "A test project");
+        assert_eq!(1, project.id());
+    }
+    #[test]
+    fn name_1() {
+        let project =Project::new(1, "Test Project", "A test project");
+        assert_eq!(project.name(), "Test Project");
+    }
+    #[test]
+    fn description_1() {
+        let project =Project::new(1, "Test Project", "A test project");
+        assert_eq!(project.description(), "A test project");
+    }
 }
