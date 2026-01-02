@@ -439,7 +439,7 @@ impl KilnDatabase {
             "CREATE TABLE IF NOT EXISTS Firing_sequences (
                     id           INTEGER  PRIMARY KEY AUTOINCREMENT,
                     name        TEXT,  
-                    descripton  TEXT,
+                    description  TEXT,
                     kiln_id     INTEGER -- Foreign key into Kilns
                 )",
             []
@@ -633,6 +633,68 @@ impl KilnDatabase {
         }
         Ok(result)
     }
+    ///
+    /// Add a new kiln program for a kiln by name.
+    /// Note that the program is empty and has to be added to.
+    /// 
+    /// ### Parameters:
+    /// * kiln_name - name of the kiln: must exist.
+    /// * program_name - Name of the kiln program - must be unique within the kiln
+    /// * program_description - Description of the new program.
+    /// ### Return:
+    /// result::Result<KilnProgram, DatabaseError>
+    /// *  On success, returns the kiln program that was created. Normally the
+    ///    caller will edit the kiln program and then invoke the 
+    ///    update_kiln_program to define the program steps.
+    /// * On failure the DatabaseError will describe, to some extent, what went wrong.
+    
+    pub fn add_kiln_program(
+        &mut self, kiln_name : &str, 
+        program_name : &str,
+         program_description : &str) -> result::Result<KilnProgram, DatabaseError> {
+        
+        // The kiln must exist else NoSuchName error or whatever database error resulted
+        // from the query:
+
+        let kiln_status = self.get_kiln(kiln_name);
+        if let Err(e) = kiln_status {
+            return Err(e);
+        }
+        let kiln_opt = kiln_status.unwrap();
+        if let None = kiln_opt {
+     
+            return Err(DatabaseError::NoSuchName(kiln_name.into()));
+        }
+        let kiln = kiln_opt.unwrap();       // The kiln exists but the program must not:
+        let kiln_id = kiln.id().to_string();
+        if self.get_count(
+            "SELECT COUNT(*) FROM Firing_sequences
+            WHERE name = ? AND kiln_id = ?", 
+            [program_name, &kiln_id]
+        ) != 0 {
+            return Err(DatabaseError::DuplicateName(program_name.into()));
+        }
+
+        // Now we can create the firing sequence:
+
+        let insert_result = self.db.execute(
+            "INSERT INTO Firing_sequences (name, description, kiln_id)
+                VALUES(?,?,?)",
+            [program_name, program_description, &kiln_id]
+        );
+        if let Err(sqle) = insert_result {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        // Get the id of the firing sequence, construct it and the kiln_program we can
+        // return:
+        let program_id = self.db.last_insert_rowid();
+        let firing_sequence = FiringSequence::new(
+            program_id as u64, program_name, program_description, kiln.id()
+        );
+        Ok(KilnProgram::new(&kiln, &firing_sequence))
+
+        
+    }
 }
 
 #[cfg(test)]
@@ -669,6 +731,8 @@ mod kiln_database_tests {
         assert!(has_table(&mut db, "Project_firings"));
         assert!(has_table(&mut db, "Project_images"));
     }
+    // Tests to manipulate Kiln definitions.
+
     #[test]
     fn add_kiln_1() {
         // Can add a kiln to the database:
@@ -773,6 +837,33 @@ mod kiln_database_tests {
 
         assert_eq!(result[0], "FirstKiln");
         assert_eq!(result[1], "SecondKiln");
+
+    }
+    // Tests to manipulate firing sequences in a kiln.
+
+    #[test]
+    fn add_program_1() {
+        // Successful addition:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let result = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            );
+        
+        let program = result.unwrap();    // Will give a nice error on failure.
+        let kiln = program.kiln();
+        let seq = program.sequence();
+        
+        assert_eq!(program.len(), 0);     // No steps.
+
+        assert_eq!(kiln.name(), "Test Kiln");
+        assert_eq!(kiln.description(), "My test kiln");
+
+        assert_eq!(seq.name(), "Test");
+        assert_eq!(seq.description(), "A test program");
 
     }
 }
