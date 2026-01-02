@@ -2217,4 +2217,23 @@ mod project {
         assert_eq!(project.description(), "A description");
     }
     // Test chaining
+
+    #[test]
+    fn chain_1() {
+        let mut project =Project::new(1, "Test Project", "A test project");
+        project.set_name("Name").set_description("Desc");
+
+        assert_eq!(project.name(), "Name");
+        assert_eq!(project.description(), "Desc");
+    }
+    #[test]
+    fn chain_2() {
+        let mut project =Project::new(1, "Test Project", "A test project");
+        project.set_description("Desc").set_name("Name");
+
+
+        assert_eq!(project.name(), "Name");
+        assert_eq!(project.description(), "Desc");
+    }
+
 }
