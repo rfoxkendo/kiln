@@ -2186,6 +2186,7 @@ mod project {
             project, Project { id: 1, name: "Test Project".into(), description: "A test project".into()}
         );
     }
+    // Test the selector/getters
     #[test]
     fn id_1() {
         let project =Project::new(1, "Test Project", "A test project");
@@ -2201,4 +2202,19 @@ mod project {
         let project =Project::new(1, "Test Project", "A test project");
         assert_eq!(project.description(), "A test project");
     }
+    // Test the mutator/setters.
+    #[test]
+    fn set_name_1() {
+        let mut  project =Project::new(1, "Test Project", "A test project");
+        project.set_name("New name");
+        assert_eq!(project.name(), "New name");
+
+    }
+    #[test]
+    fn set_description_1() {
+        let mut project =Project::new(1, "Test Project", "A test project");
+        project.set_description("A description");
+        assert_eq!(project.description(), "A description");
+    }
+    // Test chaining
 }
