@@ -920,6 +920,22 @@ mod kiln_database_tests {
     #[test]
     fn add_program_4() {
         // Can add a program with a duplicate name on another kiln:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+        db.add_kiln("Second", "Another kiln").unwrap();
+
+
+        let result = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            );
+        assert!(result.is_ok());
+        let ok = db
+                .add_kiln_program(
+                    "Second", "Test", "A test program"
+                );
+        assert!(ok.is_ok());
     }
 }
 
