@@ -711,7 +711,7 @@ impl KilnDatabase {
     /// kiln - name of the kiln for which program are listed.
     /// 
     /// ### Returns:
-    /// Result<Vec<String>, DatabaseError>  - on success, the vector lists the names of the
+    /// Result<Vec&lt;String&gt; DatabaseError>;  - on success, the vector lists the names of the
     /// programs in lexical order by name.
     /// 
     /// #### Note:
@@ -753,7 +753,7 @@ impl KilnDatabase {
     /// *  program_name - name of the kiln program.
     /// 
     /// ### Returns:
-    /// Result<Option<KilnProgram>, DatabaseError> - on success the option:
+    /// Result<Option&lt;KilnProgram&gt;, DatabaseError> - on success the option:
     /// * is None if there's no matching program.
     /// Note: The kiln name is not verified.
     /// 
