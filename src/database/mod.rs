@@ -36,7 +36,7 @@ use rusqlite::Error;
 ///   description  TEXT -- describes the kiln.
 /// )
 /// ```
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Kiln {
     id : u64,
     name : String,
@@ -91,7 +91,7 @@ impl Kiln {
 ///    target      INTEGER
 /// )
 /// ```
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct FiringSequence {
     id : u64,
     name : String,
@@ -99,22 +99,236 @@ pub struct FiringSequence {
     kiln_id : u64,
 }
 /// The steps in a firing sequence:
-/// 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+/// Note to simplify the database storage, ramp_rate is
+/// -1 if the ramp is to be AFAP.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct FiringStep {
     id  :u64,
     sequence_id : u64,
-    ramp_rate : i32,
-    target_temp : u32
+    ramp_rate : i32,     
+    target_temp : u32,
+    dwell_time  : u32    // Minutes to hold here.  
+}
+#[derive(Clone, PartialEq, Debug)]
+enum RampRate {
+    DegPerSec(u32),
+    AFAP                 // As fast as possible
+}
+impl Display for RampRate {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match self {
+            RampRate::DegPerSec(n) => write!(f, "{}", n),
+            RampRate::AFAP => write!(f, "AFAP")
+        }
+    }
 }
 /// This convenience struct holds a full
 /// kiln program:
 /// 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct KilnProgram {
     kiln : Kiln,
     sequence : FiringSequence,
     steps    : Vec<FiringStep>
+}
+
+// Implementations of all the things that make up a kiln program:
+
+impl FiringSequence {
+    /// Creates a firing sequence on a given kiln (the id of the kiln must be
+    /// known):
+    /// ### Parameters:
+    /// *  id - id of the firing sequence usually fetched  from the database.
+    /// *  name - name of the firing sequence.
+    /// *  description - what the firing sequence is for.
+    /// *  kiln_id - The id of the kiln on which the sequencde is defined.  Note
+    /// that the kiln_id will normally be gotten from the database by fetching the kiln.
+    /// 
+    /// ### Returns
+    /// A FiringSequence struct.
+    pub fn new(id: u64, name : &str, description : &str, kiln_id : u64) -> FiringSequence {
+        FiringSequence {
+            id: id, 
+            name : name.into(),
+            description : description.into(),
+            kiln_id : kiln_id
+        }
+    }
+    // Selectors:
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    pub fn description(&self) -> String {
+        self.description.clone()
+    }
+    pub fn kiln_id(&self) -> u64 {
+        self.kiln_id
+    }
+    // Mutators Note the id and kiln_id are immutable.
+
+    pub fn set_name(&mut self, new_name : &str) {
+        self.name = new_name.into();
+    }
+    pub fn set_description(&mut self, new_description : &str) {
+        self.description = new_description.into();
+    }
+}
+
+impl FiringStep {
+    /// Create a firing step...A firing step is one step in a
+    /// kiln program.
+    /// 
+    /// ### Parameters
+    /// *  id - id (usually gotten from the database)
+    /// *  sequence - The sequencde this belongs to (which FiringSequence).
+    /// *  rate  - How fast to ramp.
+    /// *  target - The target temperature.
+    /// 
+    /// ### Returns
+    /// FiringStep.
+    pub fn new(id : u64, sequence : u64, rate : RampRate, target : u32, dwell : u32) -> FiringStep {
+        let ramp_rate = match  rate {
+            RampRate::DegPerSec(r) => r as i32,
+            RampRate::AFAP => -1         // Flag for AFAP.
+        };
+
+        FiringStep {
+            id : id, 
+            sequence_id : sequence,
+            ramp_rate : ramp_rate,
+            target_temp : target,
+            dwell_time : dwell
+        }
+    }
+    // Selectors:
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+    pub fn sequence_id(&self) -> u64 {
+        self.sequence_id
+    }
+    pub fn ramp_rate(&self) -> RampRate {
+        if self.ramp_rate >= 0 {
+            RampRate::DegPerSec(self.ramp_rate as u32)
+        } else {
+            RampRate::AFAP
+        }
+    }
+    pub fn target_temp(&self) -> u32 {
+        self.target_temp
+    }
+    pub fn dwell_time(&self) ->u32 {
+        self.dwell_time
+    }
+
+    // Mutators.  Note that id and sequence_id are immutable.
+
+    pub fn set_ramp_rate(&mut self, new_rate : RampRate) {
+        match new_rate {
+            RampRate::DegPerSec(n) => self.ramp_rate = n as i32,
+            RampRate::AFAP => self.ramp_rate = -1
+        };
+    }
+    pub fn set_target_temp(&mut self, new_target : u32) {
+        self.target_temp = new_target;
+    }
+    pub fn set_dwell_time(&mut self, new_dwell_time : u32) {
+        self.dwell_time = new_dwell_time;
+    }
+    
+}
+impl KilnProgram {
+    /// Create a new, empty kiln program.  A kil program is a firing sequencde
+    /// defined within a kiln.  A such it has a kiln description, a firing sequencde
+    /// description and associated firing steps.
+    /// 
+    /// ### Parameters
+    /// *  kiln     - the kiln that has the firing sequence.
+    /// *  sequence - the description of the firing sequence.
+    pub fn new(kiln: &Kiln, sequence: &FiringSequence) -> KilnProgram {
+        KilnProgram {
+            kiln: kiln.clone(),
+            sequence: sequence.clone(),
+            steps : Vec::new()
+        }
+    }
+    // selectors - note these return clones...
+    // There are no mutators other than the methods that add steps.
+    pub fn kiln(&self) -> Kiln {
+        self.kiln.clone()
+    }
+    pub fn sequence(&self) -> FiringSequence {
+        self.sequence.clone()
+    }
+    pub fn steps(&self) -> Vec<FiringStep> {
+        self.steps.clone()
+    }
+    /// Number of steps in the program.
+    pub fn len(&self) -> usize {
+        self.steps.len()
+    }
+
+    /// Add a single step to the program.  Note we assume that the ids in the step are correct.
+    /// 
+    /// ### Parameters
+    /// *  step - a Step to add to the program.
+    
+    pub fn add_step(&mut self, step : &FiringStep)-> &mut KilnProgram
+    {
+        self.steps.push(step.clone());
+        self
+    }
+    /// add Several steps:
+    /// 
+    /// ### Parameters:
+    /// * steps the steps to add.
+    
+    pub fn add_steps(&mut self, steps: &Vec<FiringStep>)-> &mut KilnProgram {
+        for step in steps {
+            self.add_step(step);
+        }
+        self
+    }
+    ///
+    /// Remove a step from a program given its step number.
+    /// 
+    /// ### Parameters
+    /// * step - step number to remove
+    /// ### Returns
+    /// Result<(), DatabaseError>  InvalidIndex is the only Error that can be returned.
+    
+    pub fn remove_step(&mut self, step : usize) -> result::Result<(), DatabaseError> {
+        if step < self.steps.len() {
+            self.steps.remove(step);
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(step))
+        }
+    }
+    ///
+    /// Insert a step at a specific position in the step list.
+    /// 
+    /// ### Parameters:
+    /// * step - reference to the step to clone into position.
+    /// * index - Where to put the step.  0 means at the beginning and
+    ///           len at the end.
+    /// 
+    /// ### Returns
+    /// Result<(), DatabaseError> InvalidIndex is the only error that can be returned.
+    
+    pub fn insert_step(&mut self, step : &FiringStep, index : usize) -> result::Result<(), DatabaseError> {
+        if index <= self.steps.len() {
+            self.steps.insert(index, step.clone());
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(index))
+        }
+    }
 }
 
 /// A project is a set of firing sequences
@@ -183,7 +397,10 @@ pub enum DatabaseError {
     SqlError(rusqlite::Error),
     DuplicateName(String),
     NoSuchName(String),
+    InvalidIndex(usize),
     FailedDeserialization(String),
+    NoSuchProgram((String, String)),
+    InconsistentProgram((String, String)),
     Unimplemented,
 }
 
@@ -193,7 +410,12 @@ impl Display for DatabaseError {
         DatabaseError::SqlError(e) => write!(f, "{}", e),
         DatabaseError::DuplicateName(name) => write!(f, "Duplicate name: {}", name),
         DatabaseError::NoSuchName(name) => write!(f, "No such name: {}", name),
+        DatabaseError::InvalidIndex(n) => write!(f, "Invalid index {}", n),
         DatabaseError::FailedDeserialization(s) => write!(f, "Failed to deserialize a {}", s),
+        DatabaseError::NoSuchProgram((kiln, program)) =>
+            write!(f, "Kiln {} has no program named {}", kiln, program),
+        DatabaseError::InconsistentProgram((kiln, seq))=>
+            write!(f, "Input kiln ({}) program ({}) is inconsistent with database", kiln, seq),
         DatabaseError::Unimplemented => write!(f, "This operation is not yet implemented")
     }
  }   
@@ -226,7 +448,7 @@ impl KilnDatabase {
             "CREATE TABLE IF NOT EXISTS Firing_sequences (
                     id           INTEGER  PRIMARY KEY AUTOINCREMENT,
                     name        TEXT,  
-                    descripton  TEXT,
+                    description  TEXT,
                     kiln_id     INTEGER -- Foreign key into Kilns
                 )",
             []
@@ -239,7 +461,8 @@ impl KilnDatabase {
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
                     sequence_id INTEGER,  -- FK to Firing_sequences
                     ramp       INTEGER, -- -1 means AFAP.
-                    target     INTEGER
+                    target     INTEGER,
+                    hold       INTEGER
                 )",
             []
         ) {
@@ -420,6 +643,304 @@ impl KilnDatabase {
         }
         Ok(result)
     }
+    ///
+    /// Add a new kiln program for a kiln by name.
+    /// Note that the program is empty and has to be added to.
+    /// 
+    /// ### Parameters:
+    /// * kiln_name - name of the kiln: must exist.
+    /// * program_name - Name of the kiln program - must be unique within the kiln
+    /// * program_description - Description of the new program.
+    /// ### Return:
+    /// result::Result<KilnProgram, DatabaseError>
+    /// *  On success, returns the kiln program that was created. Normally the
+    ///    caller will edit the kiln program and then invoke the 
+    ///    update_kiln_program to define the program steps.
+    /// * On failure the DatabaseError will describe, to some extent, what went wrong.
+    
+    pub fn add_kiln_program(
+        &mut self, kiln_name : &str, 
+        program_name : &str,
+         program_description : &str) -> result::Result<KilnProgram, DatabaseError> {
+        
+        // The kiln must exist else NoSuchName error or whatever database error resulted
+        // from the query:
+
+        let kiln_status = self.get_kiln(kiln_name);
+        if let Err(e) = kiln_status {
+            return Err(e);
+        }
+        let kiln_opt = kiln_status.unwrap();
+        if let None = kiln_opt {
+     
+            return Err(DatabaseError::NoSuchName(kiln_name.into()));
+        }
+        let kiln = kiln_opt.unwrap();       // The kiln exists but the program must not:
+        let kiln_id = kiln.id().to_string();
+        if self.get_count(
+            "SELECT COUNT(*) FROM Firing_sequences
+            WHERE name = ? AND kiln_id = ?", 
+            [program_name, &kiln_id]
+        ) != 0 {
+            return Err(DatabaseError::DuplicateName(program_name.into()));
+        }
+
+        // Now we can create the firing sequence:
+
+        let insert_result = self.db.execute(
+            "INSERT INTO Firing_sequences (name, description, kiln_id)
+                VALUES(?,?,?)",
+            [program_name, program_description, &kiln_id]
+        );
+        if let Err(sqle) = insert_result {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        // Get the id of the firing sequence, construct it and the kiln_program we can
+        // return:
+        let program_id = self.db.last_insert_rowid();
+        let firing_sequence = FiringSequence::new(
+            program_id as u64, program_name, program_description, kiln.id()
+        );
+        Ok(KilnProgram::new(&kiln, &firing_sequence))
+
+        
+    }
+    /// List the names of the kin programs defineed on a kiln:
+    /// 
+    /// ### Paramteers:
+    /// kiln - name of the kiln for which program are listed.
+    /// 
+    /// ### Returns:
+    /// Result<Vec&lt;String&gt; DatabaseError>;  - on success, the vector lists the names of the
+    /// programs in lexical order by name.
+    /// 
+    /// #### Note:
+    ///    It is not an error for the kiln to not exist... in that case, a empty
+    /// vector is returned.
+    
+    pub fn list_kiln_programs(&mut self, kiln : &str) -> result::Result<Vec<String>, DatabaseError> {
+        let stmt = self.db.prepare(
+            "SELECT Firing_sequences.name FROM Firing_sequences
+                INNER JOIN Kilns ON Kilns.id = Firing_sequences.kiln_id
+                WHERE Kilns.name = ? 
+                ORDER BY Firing_sequences.name ASC"
+        );
+        if let Err(sqle) = stmt {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut stmt = stmt.unwrap();
+        let rows = stmt.query([kiln]);
+        if let Err(sqle) = rows {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut rows = rows.unwrap();
+        let mut result : Vec<String> = Vec::new();
+        while let Ok(r) = rows.next() {
+            if let Some(row) = r {
+                result.push(row.get_unwrap(0));
+            } else {
+                break;
+            }
+        }
+
+        Ok(result)
+        
+    }
+    /// Fetch a kiln program on a kiln.
+    /// 
+    /// ### Parameters:
+    /// *  kiln_name - name of the kiln.
+    /// *  program_name - name of the kiln program.
+    /// 
+    /// ### Returns:
+    /// Result<Option&lt;KilnProgram&gt;, DatabaseError> - on success the option:
+    /// * is None if there's no matching program.
+    /// Note: The kiln name is not verified.
+    /// 
+    pub fn get_kiln_program(
+        &mut self, kiln_name : &str, program_name : &str) -> result::Result<Option<KilnProgram>, DatabaseError> {
+        
+        // Get the definition without the steps:
+
+        let stmt = self.db.prepare(
+            "SELECT Kilns.id, Kilns.description, 
+                    Firing_sequences.id, Firing_sequences.description
+                 FROM Kilns
+                 INNER JOIN Firing_sequences ON Firing_sequences.kiln_id = Kilns.id
+                 WHERE Kilns.name = ? AND Firing_sequences.name = ?"
+        );
+        if let Err(sqle) = stmt {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut stmt = stmt.unwrap();
+        let rows = stmt.query([kiln_name, program_name]);
+        if let Err(sqle) = rows {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut rows = rows. unwrap();
+        let row = rows.next();                              // Only one match allowed...
+        if let Err(sqle) = row {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let row = row.unwrap();
+        if let None = row {
+            return Ok(None);
+        }
+        let row = row.unwrap();
+
+        // Deser can't do such a nice compound I think?
+        let kiln_desc : String = row.get_unwrap(1);
+        let kiln = Kiln::new(
+            row.get_unwrap(0), kiln_name, &kiln_desc
+        );
+    
+        let fs_desc : String = row.get_unwrap(3);
+        let program = FiringSequence::new(
+            row.get_unwrap(2), &program_name, &fs_desc, kiln.id()
+        );
+        let mut kiln_program = KilnProgram::new(&kiln, &program);
+
+        // Now we need to fetch rows firing_steps with our program id.
+        // ASs are needed to make serde able to deserialize :
+
+        let stmt = self.db.prepare(
+            "SELECT id, sequence_id, 
+                            ramp AS ramp_rate, 
+                            target AS target_temp,
+                             hold AS dwell_time 
+                    FROM Firing_steps
+                    WHERE sequence_id = ? ORDER BY id ASC"
+        );
+        if let Err(sqle) =stmt {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut stmt = stmt.unwrap();
+        let rows = stmt.query([program.id()]);
+        if let Err(sqle) = rows {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut rows = rows.unwrap(); 
+        while let Ok(r) = rows.next() {
+            if let Some(row) = r {
+                let step =  from_row::<FiringStep>(&row);
+                if let Err(e) = step {
+                    return Err(DatabaseError::FailedDeserialization("FiringStep".into()));
+                }
+                // Add the step to the program:
+                let step = step.unwrap();
+                kiln_program.add_step(&step);
+            } else {
+                break;                   // NO more rows.ss
+            }
+        }
+
+        Ok(Some(kiln_program))
+
+    }
+    /// Update the steps associated with a kiln program.  Note this is
+    /// a transaction which 
+    /// -  Removes previously existing steps defined for the program.
+    /// -  Inserts the new steps for the program.
+    /// In the end, the ids of the steps in the KilnProgram are updated to be correct.
+    /// This is done by replacing the full steps array.
+    /// The user's input step ids are ignored, of course.
+    /// 
+    /// ### Parameters:
+    /// *  program - references the kiln program to update. Note the kiln name and program name
+    /// are verified.
+    /// ### Returns:
+    /// Result<KilnProgram, DatabaseError>  -  On success, the updated kiln program is returned....with
+    /// the step ids matching the ones in the database.
+    /// 
+    /// ### Notes:
+    /// *  The kiln name and id are validated.
+    /// *  The kiln program name and Id are validated.
+    
+    pub fn update_kiln_program(&mut self, program : &KilnProgram) -> result::Result<KilnProgram, DatabaseError> {
+        // Validate the kiln:
+
+        let kiln= program.kiln();
+        let seq = program.sequence();
+
+        let current_program = self.get_kiln_program(&kiln.name(), &seq.name());
+        if let Err(e) = current_program {
+            return Err(e);
+        }
+        let current_program =current_program.unwrap();
+        if let None = current_program {
+            return Err(DatabaseError::NoSuchProgram((kiln.name(), seq.name())));
+        }
+        let current_program = current_program.unwrap();
+
+        // The kiln and sequence must match the new program info (not the steps):
+        // @TODO:  Support changing the descriptions.
+        if kiln != current_program.kiln() || seq != current_program.sequence() {
+            return Err(DatabaseError::InconsistentProgram((kiln.name(), seq.name())));
+        }
+        
+        // start a transaction if there are errors we'll abort it:
+
+        let t = self.db.transaction();
+        if let Err(sqle) =t {
+            return Err(DatabaseError::SqlError(sqle));
+        } 
+        let mut t = t.unwrap();
+        t.set_drop_behavior(rusqlite::DropBehavior::Rollback);
+        // Kill off the existing steps:
+
+        let existing_steps = current_program.steps();
+        let mut existing_step_ids = Vec::<u64>::new();
+        for step in existing_steps {
+            existing_step_ids.push(step.id());
+        }
+        let del_sql= format!("DELETE FROM Firing_steps WHERE id in({})",
+            existing_step_ids.iter().map(|_| String::from("? ")).collect::<Vec<String>>().join(", "));
+        let del_status = t.execute(
+            &del_sql,
+            rusqlite::params_from_iter(existing_step_ids)
+        );
+        if let Err(sqle) = del_status {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        // Add in the new rows
+
+        let mut resulting_program = KilnProgram::new(&kiln, &seq);    // So we can modify the step ids.
+        {
+            let step_sql = t.prepare (
+                "INSERT INTO Firing_steps (sequence_id, ramp, target, hold) 
+                    VALUES (?, ?, ?, ?)"
+            );
+            if let Err(sqle) = step_sql {
+                return Err(DatabaseError::SqlError(sqle));
+            }
+            let mut step_sql = step_sql.unwrap();
+            let seqid = seq.id();                      // Notationally convenient.
+            for step in program.steps() {
+                let ramp = if let RampRate::DegPerSec(n) = step.ramp_rate() {
+                    n as i32
+                } else {
+                    -1
+                };
+                let status = step_sql.execute(
+                    [seqid as i64, ramp as i64 , step.target_temp() as i64 , step.dwell_time() as i64]
+                );
+                if let Err(sqle) = status {
+
+                    return Err(DatabaseError::SqlError(sqle));
+                } else {
+                    let final_step = FiringStep::new(
+                            t.last_insert_rowid() as u64, seqid, step.ramp_rate(), step.target_temp(), step.dwell_time()
+                        );
+                    resulting_program.add_step(&final_step);
+                }
+
+            }
+        }
+        if let Err(sqle) = t.commit() {
+            return Err(DatabaseError::SqlError(sqle));
+        }     // 'must' succeed but...
+        Ok(resulting_program)
+    }
 }
 
 #[cfg(test)]
@@ -456,6 +977,8 @@ mod kiln_database_tests {
         assert!(has_table(&mut db, "Project_firings"));
         assert!(has_table(&mut db, "Project_images"));
     }
+    // Tests to manipulate Kiln definitions.
+
     #[test]
     fn add_kiln_1() {
         // Can add a kiln to the database:
@@ -562,6 +1085,504 @@ mod kiln_database_tests {
         assert_eq!(result[1], "SecondKiln");
 
     }
+    // Tests to manipulate firing sequences in a kiln.
+
+    #[test]
+    fn add_program_1() {
+        // Successful addition:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let result = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            );
+        
+        let program = result.unwrap();    // Will give a nice error on failure.
+        let kiln = program.kiln();
+        let seq = program.sequence();
+        
+        assert_eq!(program.len(), 0);     // No steps.
+
+        assert_eq!(kiln.name(), "Test Kiln");
+        assert_eq!(kiln.description(), "My test kiln");
+
+        assert_eq!(seq.name(), "Test");
+        assert_eq!(seq.description(), "A test program");
+
+    }
+    #[test]
+    fn add_program_2() {
+        // Invalid kiln name gives NoSuchName error with the bad kil name:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        
+
+        let result = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ); // no such kiln.
+
+        if let Err(e) = result {
+            if let DatabaseError::NoSuchName(n) = e {
+                assert_eq!(n, "Test Kiln");                     // It's the kiln that doesn't exist.
+            } else {
+                assert!(false, "Expected Nosuchname got {}", e);
+            }
+        } else {
+            assert!(false, "Expected a database error");
+        }
+
+    }
+    #[test]
+    fn add_program_3()  {
+        // Not allowed to add a duplicate program on the same kiln:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let result = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            );
+        
+        assert!(result.is_ok());
+        let bad = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            );                   // Duplicate name
+
+        if let Err(e) = bad {
+            if let DatabaseError::DuplicateName(n) = e {
+                assert_eq!(n, "Test");
+            } else {
+                assert!(false, "Expected duplicate name got {}", e);
+            }
+        } else {
+            assert!(false, "Expected an error but was ok");
+        }
+    }
+    #[test]
+    fn add_program_4() {
+        // Can add a program with a duplicate name on another kiln:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+        db.add_kiln("Second", "Another kiln").unwrap();
+
+
+        let result = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            );
+        assert!(result.is_ok());
+        let ok = db
+                .add_kiln_program(
+                    "Second", "Test", "A test program"
+                );
+        assert!(ok.is_ok());
+    }
+    #[test]
+    fn list_programs_1() {
+        // No programs in a kiln is Ok but empty:
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let result = db.list_kiln_programs("Test Kiln");
+        assert_eq!(result.unwrap().len(), 0);   // the unwrap will fail nicely if there's an error.
+
+    }
+    #[test]
+    fn list_programs_2() {
+        // Even if the kiln does not exist it's not an error:
+        // Just empty:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        assert_eq!(
+            db.list_kiln_programs("something").unwrap().len(), 
+            0
+        );
+
+    }
+    #[test]
+    fn list_programs_3() {
+        // I can list all of the programs in a single kiln:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+        db
+            .add_kiln_program(
+                "Test Kiln", "First", "Should list first"
+            ).unwrap();
+
+        let names = db.list_kiln_programs("Test Kiln").unwrap();
+        assert_eq!(names.len(), 2);
+
+        // shouild com out first then test:
+
+        assert_eq!(names[0], "First");
+        assert_eq!(names[1], "Test");
+    }
+
+    #[test]
+    fn list_programs_4() {
+        // Can disinguish between kilns properly:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+        db.add_kiln("Second Kiln", "A second kiln").unwrap();
+
+        db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+        db
+            .add_kiln_program(
+                "Test Kiln", "First", "Should list first"
+            ).unwrap();
+        db.
+            add_kiln_program(
+                "Second Kiln",
+                "Only Program", "The onlhy program in this kiln")
+            .unwrap();
+        
+        // Two programs on the "Test Kiln" and one on the "Second Kiln"
+
+        let names1 = db.list_kiln_programs("Test Kiln").unwrap();
+        let names2 = db.list_kiln_programs("Second Kiln").unwrap();
+
+        assert_eq!(names1.len(), 2);
+        assert_eq!(names2.len(), 1);
+
+        assert_eq!(names1[0], "First");
+        assert_eq!(names1[1], "Test");
+
+        assert_eq!(names2[0], "Only Program")
+
+    }
+    // Tests for getting empty programs.
+    // We need to test update_kiln_program to test get with programs that are not empty in the DB.
+    #[test]
+    fn get_empty_program1() {
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        // No such program to get give me Ok(None);
+
+        let program = db.get_kiln_program("Test Kiln", "no program");
+        assert!(program.is_ok());
+        let program = program.unwrap();
+
+        assert!(program.is_none());
+    }
+    #[test]
+    fn get_empty_program2() {
+        // No such kiln also gives a None:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let program = db.get_kiln_program("No such", "program");
+        assert!(program.is_ok());
+        let program =program.unwrap();
+        assert!(program.is_none());
+    }
+    #[test]
+    fn get_empty_program3() {
+        // Empty existing program:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+        
+        let program_gotten = db.get_kiln_program("Test Kiln", "Test");
+        assert!(program_gotten.is_ok());
+        let program_gotten = program_gotten.unwrap();
+        if let Some(got) = program_gotten {
+            assert_eq!(got.kiln(), program_added.kiln());
+            assert_eq!(got.sequence(), program_added.sequence());
+            assert_eq!(got.steps.len(), 0);
+        } else {
+            assert!(false, "Expected to fetch a program");
+        }
+    }
+    #[test]
+    fn update_kiln_program_1() {
+        // add step ok.
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+
+        // Update the program in the database with this single step:
+
+        let updated_status = db.update_kiln_program(&program_added);
+        let updated_program = updated_status.unwrap();  // Gives good errmsg.
+
+        // The kiln and sequence should not have changed:
+
+        assert_eq!(updated_program.kiln(), program_added.kiln());
+        assert_eq!(updated_program.sequence(), program_added.sequence());
+        let steps = updated_program.steps();
+
+        // validate the single step that should be there:
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].id(), 1);    // first one added.
+        assert_eq!(steps[0].sequence_id(), updated_program.sequence().id());
+        assert_eq!(steps[0].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(steps[0].target_temp(), 1000);
+        assert_eq!(steps[0].dwell_time(), 10);
+
+
+    }
+    #[test]
+    fn update_kiln_program_2() {
+        // mismatch between kiln id fails add step:
+
+        
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        // butcher the kiln id:
+
+        program_added.kiln.id += 1;  // now it's a bad id.
+
+        let update_status = db.update_kiln_program(&program_added);
+        if let Err(e) = update_status {
+            if let DatabaseError::InconsistentProgram((k, s)) = e {
+                assert_eq!(k, "Test Kiln");
+                assert_eq!(s, "Test");
+            } else {
+                assert!(false, "Expected inconstent program got: {}", e);
+            }
+        } else {
+            assert!(false, "Expected an error got OK");
+        }
+    }
+    #[test]
+    fn update_kiln_program_3() {
+        // Mismatching the sequence id also fails an update:
+
+        
+        
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        // butcher the kiln id:
+
+        program_added.sequence.id += 1;  // now it's a bad id.
+
+        let update_status = db.update_kiln_program(&program_added);
+        if let Err(e) = update_status {
+            if let DatabaseError::InconsistentProgram((k, s)) = e {
+                assert_eq!(k, "Test Kiln");
+                assert_eq!(s, "Test");
+            } else {
+                assert!(false, "Expected inconstent program got: {}", e);
+            }
+        } else {
+            assert!(false, "Expected an error got OK");
+        }
+    }
+    #[test]
+    fn update_kiln_program_4() {
+        // Changing thekiln id in the sequence results inconsistent.
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        // butcher the kiln id:
+
+        program_added.sequence.kiln_id += 1;  // now it's a bad id.
+
+        let update_status = db.update_kiln_program(&program_added);
+        if let Err(e) = update_status {
+            if let DatabaseError::InconsistentProgram((k,s)) = e {
+                assert_eq!(k, "Test Kiln");
+                assert_eq!(s, "Test");
+            } else {
+                assert!(false, "Expected inconsistent program  program got: {}", e);
+            }
+        } else {
+            assert!(false, "Expected an error got OK");
+        }
+    }
+    #[test]
+    fn update_kiln_program_5() {
+        // Changing the kiln name gives no such program..
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        // butcher the kiln id:
+
+        program_added.kiln.name = String::from("no such kiln");
+
+        let update_status = db.update_kiln_program(&program_added);
+        if let Err(e) = update_status {
+            if let DatabaseError::NoSuchProgram((k,s)) = e {
+                assert_eq!(k, "no such kiln");
+                assert_eq!(s, "Test");
+            } else {
+                assert!(false, "Expected No Such program got: {}", e);
+            }
+        } else {
+            assert!(false, "Expected an error got OK");
+        }
+
+    }
+    #[test]
+    fn update_kiln_program_6() {
+        // CHangint the seq name is also bad:
+
+         let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        // butcher the kiln id:
+
+        program_added.sequence.name = String::from("no such program");
+
+        let update_status = db.update_kiln_program(&program_added);
+        if let Err(e) = update_status {
+            if let DatabaseError::NoSuchProgram((k,s)) = e {
+                assert_eq!(k, "Test Kiln");
+                assert_eq!(s, "no such program");
+            } else {
+                assert!(false, "Expected No Such program got: {}", e);
+            }
+        } else {
+            assert!(false, "Expected an error got OK");
+        }
+
+
+    }
+    #[test]
+    fn update_kiln_program_7() {
+        // The resulting program can be gotten properly after a step is added:
+
+         let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        );
+        let update_status = db.update_kiln_program(&program_added);
+        assert!(update_status.is_ok());
+        let updated_program = update_status.unwrap();
+
+        let got_program = db
+            .get_kiln_program("Test Kiln", "Test")
+            .unwrap().unwrap();
+
+        assert_eq!(got_program, updated_program);    // Should be the same!
+    }
+    #[test]
+    fn update_kiln_program_8() {
+        // Multiple steps are fine:
+
+        // The resulting program can be gotten properly after a step is added:
+
+         let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_kiln("Test Kiln", "My test kiln").unwrap(); // MUut succeeed.
+
+        let mut program_added = db
+            .add_kiln_program(
+                "Test Kiln", "Test", "A test program"
+            ).unwrap();
+
+        // Note the step id and seq id are gotten from the database and program respectively.
+        program_added.add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+        )
+        .add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1200,  30)
+        )
+        .add_step(
+            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1320, 10)
+        )
+        .add_step(
+            &FiringStep::new(0, 0, RampRate::AFAP, 900, 60)
+        );
+        let update_status = db.update_kiln_program(&program_added);
+        let updated_program = update_status.unwrap();
+
+        let got_program = db
+            .get_kiln_program("Test Kiln", "Test")
+            .unwrap().unwrap();
+
+        assert_eq!(got_program, updated_program);    // Should be the same!
+
+    }
 }
 
 #[cfg(test)]
@@ -606,4 +1627,511 @@ mod kiln_tests {
     }
 
     
+}
+#[cfg(test)]
+mod firing_sequence_tests {
+    use super::*;
+    #[test]
+    fn new_1() {
+        let seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        assert_eq!(seq,
+            FiringSequence {
+                id: 123, 
+                name:"Slump".into(), 
+                description: "Slump with no relief".into(), 
+                kiln_id: 2
+            }
+        );
+    }
+    // Test selectors 
+    #[test]
+    fn id_1() {
+        let seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        assert_eq!(seq.id(), 123);
+    }
+    #[test]
+    fn name_1() {
+        let seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        assert_eq!(seq.name(), "Slump");
+    }
+    #[test]
+    fn description_1() {
+        let seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        assert_eq!(seq.description(), "Slump with no relief");
+    }
+    #[test]
+    fn kiln_id() {
+        let seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        assert_eq!(seq.kiln_id(), 2);
+    }
+    #[test]
+    fn set_name_1() {
+        let mut seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        seq.set_name("Slump1");
+        assert_eq!(seq.name(), "Slump1");
+    }
+    #[test]
+    fn set_description() {
+        let mut seq = FiringSequence::new(
+            123, "Slump", "Slump with no relief", 2
+        );
+        seq.set_description("Relief slump");
+        assert_eq!(seq.description, "Relief slump");
+    }
+}
+
+#[cfg(test)]
+mod fring_step_tests {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        // Degrees per second ramp rate.
+        let step = FiringStep::new(
+            12, 34, RampRate::DegPerSec(300), 900, 10
+        );
+    
+    assert_eq!(
+        step, FiringStep {
+                id: 12, sequence_id: 34, ramp_rate: 300, target_temp: 900, dwell_time: 10
+            }
+        );
+    }
+    #[test]
+    fn new_2() {
+        // AFAP ramp rate:
+
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900, 10
+        );
+        assert_eq!(
+            step,  FiringStep {
+                id: 12, sequence_id: 34, ramp_rate: -1, target_temp: 900, dwell_time: 10
+            }
+        )
+    }
+    // Test selectors.
+
+    #[test]
+    fn id_1() {
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900, 10
+        );
+        assert_eq!(step.id(), 12);
+    }
+    #[test]
+    fn sequence_id_1() {
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900, 10
+        );
+        assert_eq!(step.sequence_id(), 34);
+    }
+    #[test]
+    fn ramp_rate_1() {
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900, 10
+        );
+        assert_eq!(step.ramp_rate(), RampRate::AFAP);
+    }
+    #[test]
+    fn ramp_rate_2() {
+        let step = FiringStep::new(
+            12, 34, RampRate::DegPerSec(300), 900, 10
+        );
+        assert_eq!(step.ramp_rate(), RampRate::DegPerSec(300));
+    }
+    #[test]
+    fn target_temp_1() {
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900, 10
+        );
+        assert_eq!(step.target_temp(), 900);
+    }
+    #[test]
+    fn dwell_time_1() {
+        let step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900, 10
+        );
+        assert_eq!(step.dwell_time(), 10);
+    }
+    // Test mutators:
+    #[test]
+    fn set_ramp_1() {
+        let mut step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900, 10
+        );
+        step.set_ramp_rate(RampRate::DegPerSec(300));
+        assert_eq!(step.ramp_rate(), RampRate::DegPerSec(300));
+    }
+    #[test]
+    fn set_ramp_2() {
+        let mut  step = FiringStep::new(
+            12, 34, RampRate::DegPerSec(300), 900,10
+        );
+        step.set_ramp_rate(RampRate::AFAP);
+        assert_eq!(step.ramp_rate(), RampRate::AFAP);
+    }
+    #[test]
+    fn set_target_1() {
+        let mut step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900, 10
+        );
+        step.set_target_temp(1000);
+        assert_eq!(step.target_temp(), 1000);
+    }
+    #[test]
+    fn set_dwell_time_1() {
+          let mut step = FiringStep::new(
+            12, 34, RampRate::AFAP, 900, 10
+        );
+        step.set_dwell_time(20);
+        assert_eq!(step.dwell_time(), 20);
+    }
+
+}
+
+
+#[cfg(test)]
+mod kiln_program_tests {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let program = KilnProgram::new(&k, &seq);
+
+        assert_eq!(program.steps.len(), 0);
+        assert_eq!(program.kiln, k);
+        assert_eq!(program.sequence, seq);
+    }   
+    // test ability to add steps first.
+
+    #[test]
+    fn add_step_1() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step = FiringStep::new(1, 1, RampRate::DegPerSec(100), 900, 10);
+        program.add_step(&step);
+
+        assert_eq!(program.steps.len(), 1);    // There's a step.
+        assert_eq!(program.steps[0], step);
+    }
+    #[test]
+    fn add_step_2() {
+        // add a couple of steps:
+        // 
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        assert_eq!(program.steps.len(),2);    // there are 2 steps.
+
+        assert_eq!(program.steps[0], step1);
+        assert_eq!(program.steps[1], step2);
+    }
+    #[test]
+    fn add_steps_1() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        let steps = vec![step1, step2];
+        program.add_steps(&steps);
+
+        assert_eq!(program.steps.len(),2);    // there are 2 steps.
+
+        assert_eq!(program.steps[0], steps[0]);
+        assert_eq!(program.steps[1], steps[1]);
+    }
+
+    // Selectors:
+
+    #[test]
+    fn kiln_1() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        assert_eq!(program.kiln(), k);
+    }
+    #[test]
+    fn sequence_1() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+
+        assert_eq!(program.sequence(), seq);
+    }
+    #[test]
+    fn steps_1() {
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        let s = program.steps();
+        assert_eq!(program.steps, s);
+    }
+    #[test]
+    fn len_1() {
+        // Initially, there are no steps:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let program = KilnProgram::new(&k, &seq);
+
+        assert_eq!(program.len(), 0);
+    }
+    #[test]
+    fn len_2() {
+        // after adding steps, len is correct:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        assert_eq!(program.len(), 2);
+    }
+    // Program editing methods.
+    #[test]
+    fn remove_1() {
+        // Remove invalid step:
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        // Valid indices are 0,1:
+
+        let result = program.remove_step(2);              // Invalid step:
+        if let Err(e) = result {
+            if let DatabaseError::InvalidIndex(n) = e {
+                assert_eq!(n, 2);
+            } else {
+                assert!(false, "Not the right error type");
+            }
+        } else {
+            assert!(false, "Expected Err got Ok");                     // Must be an error:
+        }
+
+
+    }
+    #[test]
+    fn remove_2() {
+        // Valid removal:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        assert!(program.remove_step(0).is_ok());
+
+        let steps = program.steps();
+        assert_eq!(steps.len(), 1);    // Only one step left and...
+        assert_eq!(steps[0], step2);    // It's step 2.
+    }
+    #[test]
+    fn insert_1() {
+        // Insert with an invalid index:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        let step3 = FiringStep::new(2, 1, RampRate::AFAP,100, 10);
+
+        let result = program.insert_step(&step3, 3);  // invalid index.
+        if let Err(e) = result {
+            if let DatabaseError::InvalidIndex(n) = e {
+                assert_eq!(n, 3);
+            } else {
+                assert!(false, "Incorrect error type");
+            }
+        } else {
+            assert!(false, "Exepcted err");
+        }
+    }
+    #[test]
+    fn insert_2() {
+        // Insert at beginning:
+
+        
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        let step3 = FiringStep::new(2, 1, RampRate::AFAP,100, 10);
+
+        assert!(program.insert_step(&step3, 0).is_ok());
+        assert_eq!(program.len(), 3);
+        let steps = program.steps();
+        assert_eq!(steps[0], step3);
+
+    }
+    #[test]
+    fn insert_3() {
+        // Insert at end:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        let step3 = FiringStep::new(2, 1, RampRate::AFAP,100, 10);
+
+        assert!(program.insert_step(&step3, 2).is_ok());
+        assert_eq!(program.len(), 3);
+        let steps = program.steps();
+        assert_eq!(steps[2], step3);
+
+    }
+    #[test]
+    fn insert_4() {
+        // insert in the middle between steps 0 and 1:
+
+        let k = Kiln::new(1, "Kiln1", "The first kiln I bought");
+        let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
+        let mut program = KilnProgram::new(&k, &seq);
+
+        let step1 = FiringStep::new(
+            1, 1, RampRate::DegPerSec(100), 900, 10
+        );
+        let step2 = FiringStep::new(
+            2, 1, RampRate::DegPerSec(300), 1200, 30
+        );
+
+        program.add_step(&step1);
+        program.add_step(&step2);
+
+        let step3 = FiringStep::new(2, 1, RampRate::AFAP,100, 10);
+
+        assert!(program.insert_step(&step3, 1).is_ok());
+        assert_eq!(program.len(), 3);
+        let steps = program.steps();
+        assert_eq!(steps[1], step3);
+        assert_eq!(steps[0], step1);
+        assert_eq!(steps[2], step2);
+
+    }
+
 }
