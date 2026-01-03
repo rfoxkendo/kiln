@@ -356,7 +356,7 @@ impl KilnProgram {
 ///   contents   BLOB -- The image file contents.
 /// )
 /// ```
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Project {
     id : u64,
     name : String,
@@ -372,7 +372,7 @@ pub struct ProjectFiringStep {
 }
 
 /// A picture associated with a project:
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ProjectImage {
     id : u64,
     project_id : u64,
@@ -543,7 +543,159 @@ impl ProjectImage {
     }
 
 }
+impl KilnProject {
+    ///
+    /// A kiln project is built up incrementally first from a 
+    /// project and then by adding firings and pictures too it.
+    /// The firings can be edited, just as they can be in a
+    /// kiln program, but once the project has been executed,
+    /// I strongly recommend against altering the firings as that
+    /// may cause the firings to not faithfully represent the project.
+    /// Editing should only be used to 
+    /// * Incrementally build up the set of firings as the project progresses
+    /// * Correct errors in recording which firings were used.
+    ///
+    pub fn new(project : &Project) -> KilnProject {
+        KilnProject {
+            project : project.clone(),
+            firing_comments : Vec::<String>::new(),
+            firings : Vec::<KilnProgram>::new(),
+            pictures : Vec::<ProjectImage>::new()
+        }
+    }
+    // Selectors. Note these give copies of the attributes.
+    // to change the use the mutators and editor methods.
 
+    pub fn project(&self) -> Project {
+        self.project.clone()
+    }
+    pub fn firing_comments(&self) -> Vec<String> {
+        self.firing_comments.clone()
+    }
+    pub fn firings(&self) -> Vec<KilnProgram> {
+        self.firings.clone()
+    }
+    pub fn pictures(&self) -> Vec<ProjectImage> {
+        self.pictures.clone()
+    }
+    // Convenience accessors of the vectors; note the
+    // mutators will ensure that firing_commands.len() == firings.len().
+
+    pub fn num_firings(&self) -> usize {
+        self.firings.len()
+    }
+    /// Get information about a firing:
+    /// 
+    /// ### Parameters:
+    /// * idx - firing number.
+    /// ### Returns
+    /// (String, KilnProgram) The string is the firing comment.
+    /// 
+    /// ### Note:
+    /// panics if the idx is not in the range of firings.
+    /// 
+    pub fn firing(&self, idx : usize) -> (String, KilnProgram) {
+        (self.firing_comments[idx].clone(), self.firings[idx].clone())
+    }
+    pub fn picture(&self, idx : usize) -> ProjectImage {
+        self.pictures[idx].clone()
+    }
+
+    // Mutators:
+
+    pub fn add_firing(&mut self, firing : &KilnProgram, comment :&str) -> &mut KilnProject {
+        self.firing_comments.push(comment.into());
+        self.firings.push(firing.clone());
+        self
+    }
+
+    pub fn add_picture(&mut self, picture : &ProjectImage) -> &mut KilnProject {
+        self.pictures.push(picture.clone());
+        self
+    }
+
+    // Project editor methods:
+
+    /// delete a firing and its associated comment.
+    /// 
+    /// ###  Parameters:
+    /// * idx - the index of the firing to delete
+    /// 
+    /// ### Returns
+    /// Result<(), DatabaseError>  On error, typically, the error returned is InvalidIndex
+    /// because the index was out of range.
+    /// 
+    pub fn delete_firing(&mut self, idx : usize) -> result::Result<(), DatabaseError> {
+        if idx < self.firings.len() {
+            // Note that firing_comments and firings have the same len by design.
+
+            self.firing_comments.remove(idx);
+            self.firings.remove(idx);
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(idx))
+        }
+        
+    }
+    /// Insert a new firing at the specified position.
+    /// Use len() to append or better yet, add_firing().
+    /// 
+    /// ### Parameters:
+    /// * idx     - the position at which to insert the firing.
+    /// * program - the kiln program to insert as a firing.
+    /// * comment - the firing comment.
+    /// 
+    /// ### Returns:
+    /// Result<(), DatabaseError> Normally an InvalidIndex if idx is bad.
+    
+    pub fn insert_firing(
+        &mut self, program : &KilnProgram, comment : &str, idx : usize
+    ) -> result::Result<(), DatabaseError> {
+        if idx <= self.firings.len() {
+            self.firings.insert(idx, program.clone());
+            self.firing_comments.insert(idx, comment.into());
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(idx))
+        }
+        
+    }
+    /// Remove an image from the project.
+    /// 
+    /// ### Parameters:
+    /// * idx - index of the image to remove.
+    /// 
+    /// ### Returns
+    /// Result<(),DatabaseError> - Normally the error is InvalidIndex if idx is bad.
+
+    pub fn delete_picture(&mut self, idx : usize) -> result::Result<(), DatabaseError> {
+        if idx < self.pictures.len() {
+            self.pictures.remove(idx);
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(idx))
+        }
+    }
+
+    ///
+    /// Insert an image into the project at a specific position.
+    /// 
+    /// ### Parameters:
+    /// * image - refernces the image to insert.
+    /// * idx   - Where to insert it.
+    /// 
+    /// ### Returns:
+    /// Result<(),DatabaseError> - Normally the error is InvalidIndex if idx is bad.
+    
+    pub fn insert_picture(&mut self, image : &ProjectImage, idx :usize) -> result::Result<(), DatabaseError> {
+        if idx <= self.pictures.len() {
+            self.pictures.insert(idx, image.clone());
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(idx))
+        }
+    }
+}
 /// This enum is the set of errors that can occur.
 /// 
 #[derive(Debug)]
@@ -2495,5 +2647,23 @@ mod project_image_tests {
         im.set_contents(&data).set_name("new name");
         assert_eq!(im.contents(), data);
         assert_eq!(im.name(), "new name");
+    }
+}
+#[cfg(test)]
+mod kiln_project_tests {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(
+            kp, KilnProject {
+                project : project,
+                firing_comments : vec![],
+                firings : vec![],
+                pictures : vec![]
+            }
+        );
     }
 }
