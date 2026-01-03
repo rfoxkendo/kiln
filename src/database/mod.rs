@@ -2425,4 +2425,32 @@ mod project_image_tests {
             }
         );
     }
+    // Test selectors/getters.
+
+    #[test]
+    fn id_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(im.id(), 1);
+    }
+    #[test]
+    fn project_id_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(im.project_id(), 2);
+    }
+    #[test]
+    fn name_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(im.name(), "Image.jpeg");
+    }
+    #[test]
+    fn description_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(im.description, "The pieces");
+    }
+    #[test]
+    fn contents_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(im.contents(), vec![]);
+    }
+
 }
