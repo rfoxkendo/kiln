@@ -2452,5 +2452,47 @@ mod project_image_tests {
         let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
         assert_eq!(im.contents(), vec![]);
     }
+    // Test mutators.
 
+    #[test]
+    fn set_name_1() {
+         let mut im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+         im.set_name("New name");
+         assert_eq!(im.name(), "New name");
+    }
+    #[test]
+    fn set_description_1() {
+        let mut im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        im.set_description("something else");
+        assert_eq!(im.description(), "something else");
+
+    }
+    #[test]
+    fn set_contents_1() {
+        let mut im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        let data : Vec<u8> = vec![1,2,3,4,5];
+        im.set_contents(&data);
+        assert_eq!(im.contents(), data);
+    }
+
+    #[test]
+    fn chain_1() {
+        let mut im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        let data : Vec<u8> = vec![1,2,3,4,5];
+        im.set_name("name").set_description("description").set_contents(&data);
+
+        assert_eq!(im.name(), "name");
+        assert_eq!(im.description(), "description");
+        assert_eq!(im.contents(), data);
+    }
+    #[test]
+    fn chain_2() {
+        // just need to also be sure that set contents chains:
+        let mut im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        let data : Vec<u8> = vec![1,2,3,4,5];
+
+        im.set_contents(&data).set_name("new name");
+        assert_eq!(im.contents(), data);
+        assert_eq!(im.name(), "new name");
+    }
 }
