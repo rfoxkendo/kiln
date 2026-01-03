@@ -2306,4 +2306,25 @@ mod project_firing_step_tests {
             }
         );
     }
+    // Selector/getters tests:
+    #[test]
+    fn id_1()  {
+        let pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        assert_eq!(pstep.id(), 1);
+    }
+    #[test]
+    fn project_id_1() {
+        let pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        assert_eq!(pstep.project_id(), 2);
+    }
+    #[test]
+    fn firing_sequence_id_1() {
+        let pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        assert_eq!(pstep.firing_sequence_id(), 3);
+    }
+    #[test]
+    fn comment_1() {
+        let pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        assert_eq!(pstep.comment(), "A step");
+    }
 }
