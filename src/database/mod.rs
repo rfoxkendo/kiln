@@ -2327,4 +2327,23 @@ mod project_firing_step_tests {
         let pstep = ProjectFiringStep::new(1, 2, 3, "A step");
         assert_eq!(pstep.comment(), "A step");
     }
+    // mutator/setter test.
+
+    #[test]
+    fn set_comment_1() {
+        let mut pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        pstep.set_comment("A new comment");
+        assert_eq!(pstep.comment(), "A new comment");
+    }
+    #[test]
+    fn set_comment_2() {
+        // mutators chain:
+
+        let mut pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        pstep
+            .set_comment("An intermediate comment")
+            .set_comment("The final comment");
+    
+        assert_eq!(pstep.comment(), "The final comment");
+    }
 }
