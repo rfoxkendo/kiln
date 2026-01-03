@@ -334,6 +334,66 @@ impl ProjectFiringStep {
         self
     }
 }
+
+impl ProjectImage {
+    ///
+    /// Projects can have images associated with them. Throughout the life cycle of 
+    /// a project, the artist might want to take pictures of the intermediate forms
+    /// and final result.    These are stored as poroject images.
+    /// 
+    /// ### Parameters:
+    /// * id - the image id in the database.
+    /// * project - the id of the project the image is associated with
+    /// * name  - Intended to be the original name of the image file.
+    /// * description - a description that provides context for the image e.g. "Pattern tacked to the blank"
+    //
+    /// 
+    /// The id and project are immutable, the name, description and contents
+    ///  can be modified via mutators.  The contents are initially empty
+    
+    pub fn new(id : u64, project : u64, name : &str, description : &str) -> ProjectImage {
+        ProjectImage {
+            id : id,
+            project_id : project,
+            name : name.into(),
+            description : description. into(),
+            contents : Vec::<u8>::new()
+        }
+    }
+    // Selectors (getters).
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+    pub fn project_id(&self) -> u64 {
+        self.project_id
+    }
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    pub fn description(&self) -> String {
+        self.description.clone()
+    }
+    pub fn contents(&self) -> Vec<u8> {
+        self.contents.clone()
+    }
+
+    // Mutators/setters, these chain.
+
+    pub fn set_name(&mut self, new_name : &str) -> &mut ProjectImage {
+        self.name = new_name.into();
+        self
+    }
+    pub fn set_description(&mut self, new_description : &str) -> &mut ProjectImage {
+        self.description = new_description.into();
+        self
+    }
+    pub fn set_contents(&mut self, new_contents : &Vec<u8>) -> &mut ProjectImage {
+        self.contents = new_contents.clone();
+        self
+    }
+
+}
 impl KilnProgram {
     /// Create a new, empty kiln program.  A kil program is a firing sequencde
     /// defined within a kiln.  A such it has a kiln description, a firing sequencde
@@ -2345,5 +2405,24 @@ mod project_firing_step_tests {
             .set_comment("The final comment");
     
         assert_eq!(pstep.comment(), "The final comment");
+    }
+}
+#[cfg(test)]
+mod project_image_tests {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(
+            im,
+            ProjectImage {
+                id : 1, 
+                project_id : 2, 
+                name : "Image.jpeg".into(),
+                description: "The pieces".into(),
+                contents : vec![]
+            }
+        );
     }
 }
