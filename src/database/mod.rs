@@ -242,6 +242,155 @@ impl FiringStep {
     
 }
 
+impl KilnProgram {
+    /// Create a new, empty kiln program.  A kil program is a firing sequencde
+    /// defined within a kiln.  A such it has a kiln description, a firing sequencde
+    /// description and associated firing steps.
+    /// 
+    /// ### Parameters
+    /// *  kiln     - the kiln that has the firing sequence.
+    /// *  sequence - the description of the firing sequence.
+    pub fn new(kiln: &Kiln, sequence: &FiringSequence) -> KilnProgram {
+        KilnProgram {
+            kiln: kiln.clone(),
+            sequence: sequence.clone(),
+            steps : Vec::new()
+        }
+    }
+    // selectors - note these return clones...
+    // There are no mutators other than the methods that add steps.
+    pub fn kiln(&self) -> Kiln {
+        self.kiln.clone()
+    }
+    pub fn sequence(&self) -> FiringSequence {
+        self.sequence.clone()
+    }
+    pub fn steps(&self) -> Vec<FiringStep> {
+        self.steps.clone()
+    }
+    /// Number of steps in the program.
+    pub fn len(&self) -> usize {
+        self.steps.len()
+    }
+
+    /// Add a single step to the program.  Note we assume that the ids in the step are correct.
+    /// 
+    /// ### Parameters
+    /// *  step - a Step to add to the program.
+    
+    pub fn add_step(&mut self, step : &FiringStep)-> &mut KilnProgram
+    {
+        self.steps.push(step.clone());
+        self
+    }
+    /// add Several steps:
+    /// 
+    /// ### Parameters:
+    /// * steps the steps to add.
+    
+    pub fn add_steps(&mut self, steps: &Vec<FiringStep>)-> &mut KilnProgram {
+        for step in steps {
+            self.add_step(step);
+        }
+        self
+    }
+    ///
+    /// Remove a step from a program given its step number.
+    /// 
+    /// ### Parameters
+    /// * step - step number to remove
+    /// ### Returns
+    /// Result<(), DatabaseError>  InvalidIndex is the only Error that can be returned.
+    
+    pub fn remove_step(&mut self, step : usize) -> result::Result<(), DatabaseError> {
+        if step < self.steps.len() {
+            self.steps.remove(step);
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(step))
+        }
+    }
+    ///
+    /// Insert a step at a specific position in the step list.
+    /// 
+    /// ### Parameters:
+    /// * step - reference to the step to clone into position.
+    /// * index - Where to put the step.  0 means at the beginning and
+    ///           len at the end.
+    /// 
+    /// ### Returns
+    /// Result<(), DatabaseError> InvalidIndex is the only error that can be returned.
+    
+    pub fn insert_step(&mut self, step : &FiringStep, index : usize) -> result::Result<(), DatabaseError> {
+        if index <= self.steps.len() {
+            self.steps.insert(index, step.clone());
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(index))
+        }
+    }
+}
+
+/// A project is a set of firing sequences
+/// and an optional set of images.
+/// The tables used to represent this in the
+/// database are:
+/// 
+/// ```sql
+/// CREATE TABLE IF NOT EXISTS Projects (
+///    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+///    name        TEXT,
+///    description TEXT
+/// )
+/// CREATE TABLE IF NOT EXISTS Project_firings (
+///    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+///    project_id         INTEGER -- FK to Project.
+///    firing_sequence_id INTEGER, -- FK to Firing_squences
+///    comment            TEXT  -- maybe why this firing.
+/// )
+/// CREATE TABLE Project_images (
+///   id         INTEGER PRIMARY KEY AUTOINCREMENT,
+///   project_id INTEGER -- FK to project.
+///   name       TEXT,   -- Original filename e.. final.jpg
+///   caption    TEXT, -- What the picture is.
+///   contents   BLOB -- The image file contents.
+/// )
+/// ```
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct Project {
+    id : u64,
+    name : String,
+    description : String
+}
+/// The firing steps associated with a project:
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct ProjectFiringStep {
+    id : u64,
+    project_id : u64,
+    firing_sequence_id : u64,
+    comment : String
+}
+
+/// A picture associated with a project:
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct ProjectImage {
+    id : u64,
+    project_id : u64,
+    name : String,
+    description : String,
+    contents : Vec<u8>
+}
+
+/// A project fully unpacked from the database:
+/// 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct KilnProject {
+    project : Project,
+    firing_comments : Vec<String>,  // Comments from the ProjectFiringStep(s).
+    firings : Vec<KilnProgram>,
+    pictures : Vec<ProjectImage>
+}
+
 impl Project {
     /// Create a new project.
     /// 
@@ -393,154 +542,6 @@ impl ProjectImage {
         self
     }
 
-}
-impl KilnProgram {
-    /// Create a new, empty kiln program.  A kil program is a firing sequencde
-    /// defined within a kiln.  A such it has a kiln description, a firing sequencde
-    /// description and associated firing steps.
-    /// 
-    /// ### Parameters
-    /// *  kiln     - the kiln that has the firing sequence.
-    /// *  sequence - the description of the firing sequence.
-    pub fn new(kiln: &Kiln, sequence: &FiringSequence) -> KilnProgram {
-        KilnProgram {
-            kiln: kiln.clone(),
-            sequence: sequence.clone(),
-            steps : Vec::new()
-        }
-    }
-    // selectors - note these return clones...
-    // There are no mutators other than the methods that add steps.
-    pub fn kiln(&self) -> Kiln {
-        self.kiln.clone()
-    }
-    pub fn sequence(&self) -> FiringSequence {
-        self.sequence.clone()
-    }
-    pub fn steps(&self) -> Vec<FiringStep> {
-        self.steps.clone()
-    }
-    /// Number of steps in the program.
-    pub fn len(&self) -> usize {
-        self.steps.len()
-    }
-
-    /// Add a single step to the program.  Note we assume that the ids in the step are correct.
-    /// 
-    /// ### Parameters
-    /// *  step - a Step to add to the program.
-    
-    pub fn add_step(&mut self, step : &FiringStep)-> &mut KilnProgram
-    {
-        self.steps.push(step.clone());
-        self
-    }
-    /// add Several steps:
-    /// 
-    /// ### Parameters:
-    /// * steps the steps to add.
-    
-    pub fn add_steps(&mut self, steps: &Vec<FiringStep>)-> &mut KilnProgram {
-        for step in steps {
-            self.add_step(step);
-        }
-        self
-    }
-    ///
-    /// Remove a step from a program given its step number.
-    /// 
-    /// ### Parameters
-    /// * step - step number to remove
-    /// ### Returns
-    /// Result<(), DatabaseError>  InvalidIndex is the only Error that can be returned.
-    
-    pub fn remove_step(&mut self, step : usize) -> result::Result<(), DatabaseError> {
-        if step < self.steps.len() {
-            self.steps.remove(step);
-            Ok(())
-        } else {
-            Err(DatabaseError::InvalidIndex(step))
-        }
-    }
-    ///
-    /// Insert a step at a specific position in the step list.
-    /// 
-    /// ### Parameters:
-    /// * step - reference to the step to clone into position.
-    /// * index - Where to put the step.  0 means at the beginning and
-    ///           len at the end.
-    /// 
-    /// ### Returns
-    /// Result<(), DatabaseError> InvalidIndex is the only error that can be returned.
-    
-    pub fn insert_step(&mut self, step : &FiringStep, index : usize) -> result::Result<(), DatabaseError> {
-        if index <= self.steps.len() {
-            self.steps.insert(index, step.clone());
-            Ok(())
-        } else {
-            Err(DatabaseError::InvalidIndex(index))
-        }
-    }
-}
-
-/// A project is a set of firing sequences
-/// and an optional set of images.
-/// The tables used to represent this in the
-/// database are:
-/// 
-/// ```sql
-/// CREATE TABLE IF NOT EXISTS Projects (
-///    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-///    name        TEXT,
-///    description TEXT
-/// )
-/// CREATE TABLE IF NOT EXISTS Project_firings (
-///    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-///    project_id         INTEGER -- FK to Project.
-///    firing_sequence_id INTEGER, -- FK to Firing_squences
-///    comment            TEXT  -- maybe why this firing.
-/// )
-/// CREATE TABLE Project_images (
-///   id         INTEGER PRIMARY KEY AUTOINCREMENT,
-///   project_id INTEGER -- FK to project.
-///   name       TEXT,   -- Original filename e.. final.jpg
-///   caption    TEXT, -- What the picture is.
-///   contents   BLOB -- The image file contents.
-/// )
-/// ```
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct Project {
-    id : u64,
-    name : String,
-    description : String
-}
-/// The firing steps associated with a project:
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct ProjectFiringStep {
-    id : u64,
-    project_id : u64,
-    firing_sequence_id : u64,
-    comment : String
-}
-
-/// A picture associated with a project:
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct ProjectImage {
-    id : u64,
-    project_id : u64,
-    name : String,
-    description : String,
-    contents : Vec<u8>
-}
-
-/// A project fully unpacked from the database:
-/// 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct KilnProject {
-    project : Project,
-    firing_comments : Vec<String>,  // Comments from the ProjectFiringStep(s).
-    firings : Vec<KilnProgram>,
-    pictures : Vec<ProjectImage>
 }
 
 /// This enum is the set of errors that can occur.
