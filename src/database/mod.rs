@@ -584,6 +584,9 @@ impl KilnProject {
     pub fn num_firings(&self) -> usize {
         self.firings.len()
     }
+    pub fn num_images(&self) -> usize {
+        self.pictures.len()
+    }
     /// Get information about a firing:
     /// 
     /// ### Parameters:
@@ -2666,4 +2669,48 @@ mod kiln_project_tests {
             }
         );
     }
+    #[test]
+    fn project_1() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(kp.project(), project);
+    }
+    //Not we'll have more tests when we get around to editing the project.
+    #[test]
+    fn firing_comments() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(
+            kp.firing_comments(), Vec::<String>::new()
+        );
+    }
+    #[test]
+    fn firings_1() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(
+            kp.firings(), Vec::<KilnProgram>::new()
+        );
+    }
+    #[test]
+    fn pictures_1(){
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(
+            kp.pictures(), Vec::<ProjectImage>::new()
+        );
+    }
+    #[test]
+    fn num_firings_1() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(kp.num_firings(), 0);
+    }
+    #[test]
+    fn num_imgaes() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(kp.num_images(), 0);
+    }
+
 }
