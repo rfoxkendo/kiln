@@ -282,6 +282,58 @@ impl Project {
     }
 
 }
+impl ProjectFiringStep {
+    ///
+    /// Create a project firing step.  A project firing step is
+    /// a kiln program run on a project.  Some projects may involve
+    /// more than one firing.   For example, a weave will first 
+    /// fire some pieces to a wavy mold (slump firing) and then,
+    /// after sliding straight pieces into the molded pieces a second
+    /// slump or tack step to flatten the weave.  Another example,
+    /// Dishes may require a tack step to create a design followed by
+    /// a slump into the dish mold.
+    /// 
+    /// This struct captures the database representatin of a firing step.
+    /// 
+    /// ### Parameters:
+    /// *   id - id of the project firing step.
+    /// *   project_id - id of the owning project.
+    /// *   firing_sequence_id - id of the firing sequence (which points to the steps and back to the kiln).
+    /// *   comment - Free text intended to describe why the firing was needed (e.g. final slump into dish mold).
+    /// 
+    /// ### Returns:
+    /// ProjectFIringStep
+    
+    pub fn new(id : u64, project : u64, firing : u64, comment : &str) -> ProjectFiringStep {
+        ProjectFiringStep {
+            id: id,
+            project_id : project,
+            firing_sequence_id : firing,
+            comment : comment.into()
+        }
+    }
+    // Selectors:
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }   
+    pub fn project_id(&self) -> u64 {
+        self.project_id
+    }
+    pub fn firing_sequence_id(&self) -> u64 {
+        self.firing_sequence_id
+    }
+    pub fn comment(&self) -> String {
+        self.comment.clone()
+    }
+
+    // Mutators - We can only modify the comment:
+
+    pub fn set_comment(&mut self, new_comment : &str) -> &mut ProjectFiringStep {
+        self.comment = new_comment.into();
+        self
+    }
+}
 impl KilnProgram {
     /// Create a new, empty kiln program.  A kil program is a firing sequencde
     /// defined within a kiln.  A such it has a kiln description, a firing sequencde
@@ -404,7 +456,7 @@ pub struct Project {
 }
 /// The firing steps associated with a project:
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct ProjectFiringSteps {
+pub struct ProjectFiringStep {
     id : u64,
     project_id : u64,
     firing_sequence_id : u64,
@@ -426,6 +478,7 @@ pub struct ProjectImage {
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct KilnProject {
     project : Project,
+    firing_comments : Vec<String>,  // Comments from the ProjectFiringStep(s).
     firings : Vec<KilnProgram>,
     pictures : Vec<ProjectImage>
 }
@@ -2236,4 +2289,21 @@ mod project {
         assert_eq!(project.description(), "Desc");
     }
 
+}
+
+#[cfg(test)]
+mod project_firing_step_tests {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        let pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        assert_eq!(
+            pstep,
+            ProjectFiringStep {
+                id : 1, project_id : 2, firing_sequence_id : 3, 
+                comment : "A step".into()
+            }
+        );
+    }
 }
