@@ -1947,6 +1947,26 @@ mod kiln_database_tests {
         let id = db.db.last_insert_rowid();  
         assert_eq!(result.project().id(), id as u64);
     }
+    #[test]
+    fn add_project_2() {
+        // Duplicate project name is bad:
+
+     let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        let result = db.add_project("Test Project", "A test Project");
+        let result = result.unwrap();    // Better errror message than assert if it's not ok.
+
+        let result = db.add_project("Test Project", "A faild project insert");
+        if let Err(e) = result {
+            if let DatabaseError::DuplicateName(n) = e {
+                assert_eq!(n, "Test Project");
+            } else {
+                assert!(false, "Expected duplicate name error, got : {}", e);
+            }
+        } else {
+            assert!(false, "Expected a database error but was ok.");
+        }
+    }
 
 }
 
