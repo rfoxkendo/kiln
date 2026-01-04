@@ -1250,6 +1250,44 @@ impl KilnDatabase {
         }     // 'must' succeed but...
         Ok(resulting_program)
     }
+    // Suport for projects.
+
+    /// Add a new project to the database.  A project is a set of firing steps
+    /// which are intended to achieve a finished piece. Projects are added
+    /// to the database empty.  Later, firing steps and images can be added
+    /// to a project.
+    /// 
+    /// ### Parameters:
+    /// * name - a unique name for the project.
+    /// * description - a description of the project.
+    /// 
+    /// ### Returns:
+    /// Result<KilnProject, DatabaseError> - On success the empty kiln project is returned.
+    /// 
+    
+    pub fn add_project(&mut self, name : &str, description : &str) -> result::Result<KilnProject, DatabaseError> {
+
+        // Check the uniqueness of the project name:
+
+        if self.get_count("SELECT COUNT(*) FROM Projects WHERE name=?",[name]) > 0 {
+            return Err(DatabaseError::DuplicateName(name.into()));
+        }
+        // Make the project in the database.
+
+        let status = self.db.execute(
+            "INSERT INTO Projects (name, description) VALUES (?,?)",
+            [name, description]
+        );
+        if let Err(sqle) = status {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        // Success so make the project and the KilnProject:
+
+        let project = Project::new(self.db.last_insert_rowid() as u64, name, description);
+        Ok(KilnProject::new(&project))
+
+    
+    }
 }
 
 #[cfg(test)]
@@ -1892,6 +1930,24 @@ mod kiln_database_tests {
         assert_eq!(got_program, updated_program);    // Should be the same!
 
     }
+    // Tests for Kiln projects.
+
+    #[test]
+    fn add_project_1() {
+        // success:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        let result = db.add_project("Test Project", "A test Project");
+        let result = result.unwrap();    // Better errror message than assert if it's not ok.
+
+        assert_eq!(result.project().name(), "Test Project");
+        assert_eq!(result.project().description(), "A test Project");
+
+        let id = db.db.last_insert_rowid();  
+        assert_eq!(result.project().id(), id as u64);
+    }
+
 }
 
 #[cfg(test)]
