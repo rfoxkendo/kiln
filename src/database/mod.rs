@@ -363,7 +363,7 @@ pub struct Project {
     description : String
 }
 /// The firing steps associated with a project:
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ProjectFiringStep {
     id : u64,
     project_id : u64,
@@ -383,7 +383,7 @@ pub struct ProjectImage {
 
 /// A project fully unpacked from the database:
 /// 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct KilnProject {
     project : Project,
     firing_comments : Vec<String>,  // Comments from the ProjectFiringStep(s).
@@ -710,6 +710,7 @@ pub enum DatabaseError {
     FailedDeserialization(String),
     NoSuchProgram((String, String)),
     InconsistentProgram((String, String)),
+    InconsistentProject(String),
     Unimplemented,
 }
 
@@ -725,6 +726,8 @@ impl Display for DatabaseError {
             write!(f, "Kiln {} has no program named {}", kiln, program),
         DatabaseError::InconsistentProgram((kiln, seq))=>
             write!(f, "Input kiln ({}) program ({}) is inconsistent with database", kiln, seq),
+        DatabaseError::InconsistentProject(n) =>
+            write!(f, "Input project {} is inconsistent", n), 
         DatabaseError::Unimplemented => write!(f, "This operation is not yet implemented")
     }
  }   
@@ -825,6 +828,43 @@ impl KilnDatabase {
         let  row = rows.next().unwrap().unwrap();
 
         row.get_unwrap(0)
+    }
+
+    // For a project, get its firing steps and comments:
+    // Stub for now.
+    fn get_project_firing_steps(&mut self, project : &KilnProject) -> result::Result<Vec<(KilnProgram, String)>, DatabaseError> {
+        Ok(vec![])
+    }
+    // For a project, get its images
+    // 
+    fn get_project_images(&mut self, project: &KilnProject) -> result::Result<Vec::<ProjectImage>, DatabaseError> {
+        let stmt = self.db.prepare("
+            SELECT id, name, caption, contents FROM Project_images
+            WHERE project_id = ?
+        ");
+        if let Err(sqle) = stmt {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut stmt = stmt.unwrap();
+        let rows = stmt.query([project.project().id()]);
+        if let Err(sqle) = rows {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut rows = rows.unwrap();
+        let mut result = Vec::<ProjectImage>::new();
+        while let Ok(row) = rows.next() {
+            if let Some(r) = row {
+                let image = from_row::<ProjectImage>(&r);
+                if let Err(e) = image {
+                    return Err(DatabaseError::FailedDeserialization(format!("{} : {}", "Project Image", e)));
+                }
+                result.push(image.unwrap());
+            } else {
+                break;
+            }
+        }
+
+        Ok(result)
     }
 
     /// create a new database or open an existing one
@@ -1287,6 +1327,139 @@ impl KilnDatabase {
         Ok(KilnProject::new(&project))
 
     
+    }
+    
+    ///
+    /// Return the full project definition given a project name.
+    /// 
+    /// ### Parameters:
+    /// * name -name of the project.
+    /// 
+    /// ### Returns:
+    /// 
+    /// Result<Option<KilnProject>, DatabaseError> :
+    /// *  Error if unable to execute the queries.
+    /// *  None if there's no such project.
+    /// *  Some containing the project definition.
+    
+    pub fn get_project(&mut self, name : &str) -> result::Result<Option<KilnProject>, DatabaseError> {
+        // This block allows the root_query to drop which prevents us from havig an immutable
+        // borrow of self when we need mutable borrows to get the firings and images later on.
+
+        let mut full_project = {
+            let root_query = self.db.prepare(
+                "SELECT id, name, decription FROM Projects 
+                WHERE name = ?"
+            );
+            if let Err(sqle) = root_query {
+                return Err(DatabaseError::SqlError(sqle));
+            }
+            let mut root_query = root_query.unwrap();
+            let root_rows = root_query.query([name]);
+            if let Err(sqle) = root_rows {
+                return Err(DatabaseError::SqlError(sqle));
+            }
+            let mut  root_rows = root_rows.unwrap();
+            let row = root_rows.next();
+            if let Err(sqle) = row {
+                return Err(DatabaseError::SqlError(sqle));
+            }
+            let row = row.unwrap();
+            if let None = row {
+                return Ok(None);
+            }
+            let row = row.unwrap();
+            let project = from_row::<Project>(&row);
+            if let Err(e) = project {
+                return Err(DatabaseError::FailedDeserialization(format!("{} : {}", "Project", e)));
+            }
+
+            KilnProject::new(&project.unwrap())
+        };
+
+        // Fold in the firings:
+
+        let firings = self.get_project_firing_steps(&full_project);
+        if let Err(e) = firings {
+            return Err(e);
+        }
+        for firing in firings.unwrap() {
+            full_project.add_firing(&firing.0, &firing.1);
+        }
+        // Fold in the images:
+
+        let images = self.get_project_images(&full_project);
+        if let Err(e) = images {
+            return Err(e);
+        }
+        for image in images.unwrap() {
+            full_project.add_picture(&image);
+        }
+        Ok(Some(full_project))
+    }
+
+
+    ///
+    /// Add a new firing for a project.  A firing is  kiln program defined on a kiln.
+    /// It's a project step.  A project may require more than one firing.  For example,
+    /// A simple dish might require a tack step to add a design to the blank and then a slump
+    /// step into the mold 
+    /// 
+    /// ### Parameters:
+    /// * project - the kiln project we're adding a step to.
+    /// * kiln    - Name of the kiln we're firing in.
+    /// * program - Name of that kiln's firing program used for the Firing.
+    /// * comment - Might give the reason for this firing.
+    /// 
+    /// ### Returns:
+    /// 
+    /// Result<KilnProject, DatabaseError> - On success, the updtaed kiln program.
+    /// 
+    pub fn add_project_firing(
+        &mut self, project : &KilnProject, kiln_name : &str, program_name : &str, comment : &str
+    ) -> result::Result<KilnProject, DatabaseError> {
+        let program = self.get_kiln_program(kiln_name, program_name);
+        if let Err(e) = program {
+            return Err(e);
+        }
+        let program = program.unwrap();
+        if let None = program {
+            return Err(DatabaseError::NoSuchProgram((kiln_name.into(), program_name.into()))); 
+        }
+        let program = program.unwrap();
+        
+        // The database project must exist and must match our input project.
+
+        let db_project = self.get_project(&project.project().name());
+        if let Err(e) = db_project {
+            return Err(e);
+        }
+        let db_project = db_project.unwrap();
+        if let None = db_project {
+            return Err(DatabaseError::NoSuchName((project.project().name())));
+        }
+        let db_project = db_project.unwrap();
+
+        if db_project.project().id() != project.project().id() {
+            return Err(DatabaseError::InconsistentProject(project.project().name()));
+        }
+        // Add the program to the project in the database.
+
+        let result = self.db.execute(
+            "INSERT INTO Project_firings (project_id, firing_sequence_id, comment)
+                        VALUES(?,?,?)
+            ",
+            [project.project.id().to_string(), program.sequence().id().to_string(), comment.into()]
+        );
+        if let Err(sqle) = result {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut result  = project.clone();      
+        result.add_firing(&program, comment);
+
+        Ok(result)
+
+
     }
 }
 
