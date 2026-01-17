@@ -833,7 +833,57 @@ impl KilnDatabase {
     // For a project, get its firing steps and comments:
     // Stub for now.
     fn get_project_firing_steps(&mut self, project : &KilnProject) -> result::Result<Vec<(KilnProgram, String)>, DatabaseError> {
-        Ok(vec![])
+        let project_id = project.project.id;
+        let mut result  : Vec<(KilnProgram, String)> = vec![];
+        let mut names_comments : Vec<(String, String, String)> = vec![];
+        {
+            let stmt = self.db.prepare(
+                "SELECT  Firingsequences.name, Kilns.name, Project_firings.comment \
+                    FROM Project_firings 
+                    INNER JOIN Firing_sequencdes ON Firing_sequences.id = Project_firings.firing_sequence_id
+                    INNER JOIN Kilns ON Firing_sequences.kiln_id = Kilns.id
+                    WHERE Project_firings.project_id = ?"
+            );
+            if let Err(e) = stmt {
+                return Err(DatabaseError::SqlError(e));
+            }
+            // Do the query and get the rows if there's success.  For
+            // each row we get the associated kiln program and add it tothe result vector with the commment.
+
+            let mut stmt = stmt.unwrap();                  // must succeed.
+            let rows = stmt.query([project_id]);
+            if let Err(e) = rows {
+                return Err(DatabaseError::SqlError(e));
+            }
+            let mut rows = rows.unwrap();
+            
+
+            while let Ok(row) = rows.next() {
+                if let Some(r) = row {
+                    let fs_name : String = r.get_unwrap(0);
+                    let kiln_name :String = r.get_unwrap(1);
+                    let comment : String = r.get_unwrap(2);
+
+                    names_comments.push((kiln_name.clone(), fs_name.clone(), comment.clone()));
+
+
+                } else {
+                    break;                   // End of iteration?
+                }
+            }
+        }
+        // Now get the kiln programs:
+
+        for (kname, pname, comment) in names_comments {
+            let pgm = self.get_kiln_program(&kname, &pname);
+            if let Err(e) = pgm {
+                return Err(e);
+            }
+            let pgm = pgm.unwrap().unwrap();        // None is not an option given the query.
+            result.push((pgm.clone(), comment.clone()));
+        }
+
+        Ok(result)
     }
     // For a project, get its images
     // 
@@ -1436,7 +1486,7 @@ impl KilnDatabase {
         }
         let db_project = db_project.unwrap();
         if let None = db_project {
-            return Err(DatabaseError::NoSuchName((project.project().name())));
+            return Err(DatabaseError::NoSuchName(project.project().name()));
         }
         let db_project = db_project.unwrap();
 
