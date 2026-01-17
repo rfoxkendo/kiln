@@ -1504,12 +1504,50 @@ impl KilnDatabase {
         if let Err(sqle) = result {
             return Err(DatabaseError::SqlError(sqle));
         }
-        let mut result  = project.clone();      
-        result.add_firing(&program, comment);
+        // Update the project from the database:
 
-        Ok(result)
+        let updated_project = self.get_project(&project.project.name);
+        if let Err(e) = updated_project {
+            return Err(e);
+        }
+        let updated_project = updated_project.unwrap().unwrap();      // Must work.
+        Ok(updated_project)
+
+        
 
 
+    }
+    /// Add an image to a project.
+    /// 
+    /// ### Parameters
+    ///    project - references the kiln project to modify as it is so far.
+    ///    image_name  - Name of an image to modify... this is usually the name of the file from which the data came.
+    ///    description - Description of the image (e.g. "After initial cuttin before fring with Tack fuse").
+    ///    image_data  - The data that makes up the image.
+    /// 
+    /// ### Returns
+    /// Result<KilnProject, DatabaseError> - the updated project on success.
+    /// 
+    pub fn add_project_image(
+        &mut self, project : &KilnProject,
+        image_name : &str, 
+        description : &str, 
+        image_data : &Vec<u8>) -> result::Result<KilnProject, DatabaseError> {
+        
+        let project_id = project.project.id;
+        let status = self.db.execute(
+            "INSERT INTO Project_images
+                (project_id, name, caption, contents) VALUES (?,?,?,?)
+            ", (project_id, image_name, description, image_data)
+        );
+        if let Err(e) = status {
+            return Err(DatabaseError::SqlError(e));
+        }
+        // Return the resultof get_project on the current project name.
+
+
+
+        Err(DatabaseError::Unimplemented)
     }
 }
 
