@@ -1521,7 +1521,7 @@ impl KilnDatabase {
     /// 
     /// ### Parameters
     ///    project - references the kiln project to modify as it is so far.
-    ///    image_name  - Name of an image to modify... this is usually the name of the file from which the data came.
+    ///    image_name  - Name of an image to add... this is usually the name of the file from which the data came.
     ///    description - Description of the image (e.g. "After initial cuttin before fring with Tack fuse").
     ///    image_data  - The data that makes up the image.
     /// 
@@ -1547,7 +1547,12 @@ impl KilnDatabase {
 
 
 
-        Err(DatabaseError::Unimplemented)
+        let final_project = self.get_project(&(project.project.name));
+        if let Err(e) = final_project {
+            return Err(e);
+        }
+
+        Ok(final_project.unwrap().unwrap())
     }
 }
 
@@ -2386,7 +2391,7 @@ mod kiln_database_tests {
 
     }
 
-    
+    // Tests for adding images to projects.  
 }
 
 #[cfg(test)]
