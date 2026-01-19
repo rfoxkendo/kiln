@@ -796,7 +796,7 @@ impl KilnDatabase {
         if let Err(e) = db.execute(
             " CREATE TABLE IF NOT EXISTS Project_firings (
                     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id         INTEGER -- FK to Project.
+                    project_id         INTEGER, -- FK to Project.
                     firing_sequence_id INTEGER, -- FK to Firing_squences
                     comment            TEXT  -- maybe why this firing.
                 )",
@@ -809,7 +809,7 @@ impl KilnDatabase {
         if let Err(e) = db.execute(
             "CREATE TABLE Project_images (
                     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id INTEGER -- FK to project.
+                    project_id INTEGER, -- FK to project.
                     name       TEXT,   -- Original filename e.. final.jpg
                     caption    TEXT, -- What the picture is.
                     contents   BLOB -- The image file contents.
@@ -838,11 +838,13 @@ impl KilnDatabase {
         let mut names_comments : Vec<(String, String, String)> = vec![];
         {
             let stmt = self.db.prepare(
-                "SELECT  Firingsequences.name, Kilns.name, Project_firings.comment \
+                "SELECT  Firing_sequences.name, Kilns.name, Project_firings.comment \
                     FROM Project_firings 
-                    INNER JOIN Firing_sequencdes ON Firing_sequences.id = Project_firings.firing_sequence_id
+                    INNER JOIN Firing_sequences ON Firing_sequences.id = Project_firings.firing_sequence_id
                     INNER JOIN Kilns ON Firing_sequences.kiln_id = Kilns.id
-                    WHERE Project_firings.project_id = ?"
+                    WHERE Project_firings.project_id = ?
+                    ORDER BY Firing_sequences.id ASC
+                    "
             );
             if let Err(e) = stmt {
                 return Err(DatabaseError::SqlError(e));
@@ -890,7 +892,7 @@ impl KilnDatabase {
     fn get_project_images(&mut self, project: &KilnProject) -> result::Result<Vec::<ProjectImage>, DatabaseError> {
         let stmt = self.db.prepare("
             SELECT id, name, caption, contents FROM Project_images
-            WHERE project_id = ?
+            WHERE project_id = ?  ORDER BY id ASC
         ");
         if let Err(sqle) = stmt {
             return Err(DatabaseError::SqlError(sqle));
@@ -1398,7 +1400,7 @@ impl KilnDatabase {
 
         let mut full_project = {
             let root_query = self.db.prepare(
-                "SELECT id, name, decription FROM Projects 
+                "SELECT id, name, description FROM Projects 
                 WHERE name = ?"
             );
             if let Err(sqle) = root_query {
@@ -1512,8 +1514,6 @@ impl KilnDatabase {
         }
         let updated_project = updated_project.unwrap().unwrap();      // Must work.
         Ok(updated_project)
-
-        
 
 
     }
@@ -2207,6 +2207,12 @@ mod kiln_database_tests {
 
         let id = db.db.last_insert_rowid();  
         assert_eq!(result.project().id(), id as u64);
+
+        // No firings and no images:
+
+        assert_eq!(result.firing_comments.len(), 0);
+        assert_eq!(result.firings.len(), 0);
+        assert_eq!(result.pictures.len(), 0);
     }
     #[test]
     fn add_project_2() {
@@ -2215,7 +2221,7 @@ mod kiln_database_tests {
      let mut db = KilnDatabase::new(":memory:").unwrap();
 
         let result = db.add_project("Test Project", "A test Project");
-        let result = result.unwrap();    // Better errror message than assert if it's not ok.
+        result.unwrap();    // Better errror message than assert if it's not ok.
 
         let result = db.add_project("Test Project", "A faild project insert");
         if let Err(e) = result {
@@ -2228,7 +2234,159 @@ mod kiln_database_tests {
             assert!(false, "Expected a database error but was ok.");
         }
     }
+    // Can add firings to kiln programs:
 
+    #[test]
+    fn add_firing_1() {
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        // Add a kiln and a firing sequence to the kiln.
+        db.add_kiln("Big", "A big kiln").unwrap();
+        let mut program = db.add_kiln_program("Big", "program", "A program").unwrap();
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 900, 10 ));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1200, 5));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1400, 10));
+        program.add_step(&FiringStep::new(0, 0, RampRate::AFAP, 1000, 30));
+        db.update_kiln_program(&program).unwrap();
+
+        // Make a project and add a firing:
+
+        let project = db.add_project("AProject", "A test project").unwrap();
+
+        // Add the step:
+
+        let project = 
+            db.add_project_firing(&project, "Big", "program", "The first firing");
+        let project = project.unwrap();
+        
+
+        // The base stuff should still be there but there also should be a firing and a riging comment.
+
+        assert_eq!(project.project.name(), "AProject");
+        assert_eq!(project.project.description(), "A test project");
+        
+        assert_eq!(project.firing_comments.len(), 1);  
+        assert_eq!(project.firing_comments[0], "The first firing");
+
+        assert_eq!(project.firings.len(), 1);
+
+        let firing = project.firings[0].clone();
+        assert_eq!(firing.steps.len(), 4);      // The firing consists of 4 steps.
+
+        // Since the ids won't match we need to do this the hard way
+
+        assert_eq!(firing.steps[0].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing.steps[0].target_temp(), 900);
+        assert_eq!(firing.steps[0].dwell_time(), 10);
+
+        assert_eq!(firing.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing.steps[1].target_temp(), 1200);
+        assert_eq!(firing.steps[1].dwell_time(), 5);
+
+        assert_eq!(firing.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing.steps[2].target_temp(), 1400);
+        assert_eq!(firing.steps[2].dwell_time(), 10);
+
+        assert_eq!(firing.steps[3].ramp_rate(), RampRate::AFAP);
+        assert_eq!(firing.steps[3].target_temp(), 1000);
+        assert_eq!(firing.steps[3].dwell_time(), 30);
+    }
+    #[test]
+    fn add_firing_2() {
+        // No such firing sequence...
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        // Add a kiln and a firing sequence to the kiln.
+        db.add_kiln("Big", "A big kiln").unwrap();
+        let project = db.add_project("AProject", "A test project").unwrap();
+
+        // Add the step:
+
+        let project = 
+            db.add_project_firing(&project, "Big", "program", "The first firing");
+        
+        assert!(project.is_err());
+    }
+    #[test]
+    fn add_firing_3() {
+        // can add more than one firing sequence to the project.
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        // Add a kiln and a firing sequence to the kiln. Kinda like a full fuse.
+        db.add_kiln("Big", "A big kiln").unwrap();
+        let mut program = db.add_kiln_program("Big", "program", "A program").unwrap();
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 900, 10 ));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1200, 5));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1400, 10));
+        program.add_step(&FiringStep::new(0, 0, RampRate::AFAP, 1000, 30));
+        db.update_kiln_program(&program).unwrap();
+
+        // And another.. kind of like a slump.
+        let mut program = 
+            db.add_kiln_program("Big", "second", "Simple slump")
+            .unwrap();
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(250), 900, 10));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(250), 1250, 30));
+        program.add_step(&FiringStep::new(0,0, RampRate::AFAP, 1000, 60));
+        db.update_kiln_program(&program).unwrap();
+
+
+        // Make project with first a full fuse then a slump:
+
+        let project = db
+            .add_project("Compound", "A project with two firing steps")
+            .unwrap();
+        let project = db.add_project_firing(&project, "Big", "program", "Full fuse step").unwrap();
+        let project = db.add_project_firing(&project, "Big", "second", "Slump into mold").unwrap();
+
+        // CHeck the steps, add_firing_1 determined(?) that everything else is good.
+
+        let firings = &project.firings;
+        assert_eq!(firings.len(), 2);
+        let firing1 = firings[0].clone();
+        let firing2 = firings[1].clone();
+
+        assert_eq!(firing1.steps.len(), 4);      // The firing consists of 4 steps.
+
+        // Since the ids won't match we need to do this the hard way
+
+        assert_eq!(firing1.steps[0].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing1.steps[0].target_temp(), 900);
+        assert_eq!(firing1.steps[0].dwell_time(), 10);
+
+        assert_eq!(firing1.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing1.steps[1].target_temp(), 1200);
+        assert_eq!(firing1.steps[1].dwell_time(), 5);
+
+        assert_eq!(firing1.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing1.steps[2].target_temp(), 1400);
+        assert_eq!(firing1.steps[2].dwell_time(), 10);
+
+        assert_eq!(firing1.steps[3].ramp_rate(), RampRate::AFAP);
+        assert_eq!(firing1.steps[3].target_temp(), 1000);
+        assert_eq!(firing1.steps[3].dwell_time(), 30);
+
+
+        assert_eq!(firing2.steps.len(), 3);
+
+        assert_eq!(firing2.steps[0].ramp_rate(), RampRate::DegPerSec(250));
+        assert_eq!(firing2.steps[0].target_temp(), 900);
+        assert_eq!(firing2.steps[0].dwell_time(), 10);
+
+        assert_eq!(firing2.steps[1].ramp_rate(), RampRate::DegPerSec(250));
+        assert_eq!(firing2.steps[1].target_temp(), 1250);
+        assert_eq!(firing2.steps[1].dwell_time(), 30);
+
+        assert_eq!(firing2.steps[2].ramp_rate(), RampRate::AFAP);
+        assert_eq!(firing2.steps[2].target_temp(), 1000);
+        assert_eq!(firing2.steps[2].dwell_time(), 60);
+
+
+
+    }
+
+    
 }
 
 #[cfg(test)]
@@ -3051,3 +3209,4 @@ mod kiln_project_tests {
     }
 
 }
+
