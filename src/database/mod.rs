@@ -2507,6 +2507,35 @@ mod kiln_database_tests {
 
         assert_eq!(list.len(), 0);
     }
+    #[test]
+    fn list_projects_2() {
+        // there is one project:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_project("First project", "for tests").unwrap();
+
+        let list = db.list_projects().unwrap();
+
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0], "First project");
+    }
+    #[test]
+    fn list_project_3() {
+        // there are a few and they come out in order:
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_project("First project", "for tests").unwrap();
+        db.add_project("Another Project", "SHould list first").unwrap();
+        db.add_project("Final project", "Should come out second!").unwrap();
+
+        let list = db.list_projects().unwrap();
+
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0], "Another Project");
+        assert_eq!(list[1], "Final project");
+        assert_eq!(list[2], "First project");
+
+    }
+
 }
 
 #[cfg(test)]
