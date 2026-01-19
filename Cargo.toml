@@ -7,4 +7,5 @@ edition = "2024"
 serde = {version = "1.0.228", features = ["derive"]}
 rusqlite = {version = "0.37.0", features = ["bundled"]}
 serde_rusqlite = "0.40.1"
-clap = {version = "4.5.54", fetures = ["derive"]}
+clap = {version = "4.5.54", features = ["derive"]}
+clap_derive = { version = "4.0.0-rc.1" }

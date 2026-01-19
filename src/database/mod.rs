@@ -807,7 +807,7 @@ impl KilnDatabase {
         // Project_images:
 
         if let Err(e) = db.execute(
-            "CREATE TABLE Project_images (
+            "CREATE TABLE IF NOT EXISTS Project_images (
                     id         INTEGER PRIMARY KEY AUTOINCREMENT,
                     project_id INTEGER, -- FK to project.
                     name       TEXT,   -- Original filename e.. final.jpg
