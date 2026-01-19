@@ -891,7 +891,7 @@ impl KilnDatabase {
     // 
     fn get_project_images(&mut self, project: &KilnProject) -> result::Result<Vec::<ProjectImage>, DatabaseError> {
         let stmt = self.db.prepare("
-            SELECT id, name, caption, contents FROM Project_images
+            SELECT id, project_id, name, caption, contents, caption as description FROM Project_images
             WHERE project_id = ?  ORDER BY id ASC
         ");
         if let Err(sqle) = stmt {
@@ -1543,9 +1543,7 @@ impl KilnDatabase {
         if let Err(e) = status {
             return Err(DatabaseError::SqlError(e));
         }
-        // Return the resultof get_project on the current project name.
-
-
+        // Return the result of get_project on the current project name.
 
         let final_project = self.get_project(&(project.project.name));
         if let Err(e) = final_project {
@@ -2347,6 +2345,10 @@ mod kiln_database_tests {
 
         // CHeck the steps, add_firing_1 determined(?) that everything else is good.
 
+        assert_eq!(project.firing_comments.len(), 2);  // Ezach firing has a comment and no more.
+        assert_eq!(project.firing_comments[0], "Full fuse step");
+        assert_eq!(project.firing_comments[1], "Slump into mold");
+
         let firings = &project.firings;
         assert_eq!(firings.len(), 2);
         let firing1 = firings[0].clone();
@@ -2354,6 +2356,8 @@ mod kiln_database_tests {
 
         assert_eq!(firing1.steps.len(), 4);      // The firing consists of 4 steps.
 
+        
+        
         // Since the ids won't match we need to do this the hard way
 
         assert_eq!(firing1.steps[0].ramp_rate(), RampRate::DegPerSec(300));
@@ -2392,6 +2396,32 @@ mod kiln_database_tests {
     }
 
     // Tests for adding images to projects.  
+
+    #[test]
+    fn add_project_image_1() {
+        // add a single image to a project:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        
+        // Make project with first a full fuse then a slump:
+
+        let project = db
+            .add_project("Images", "A project with an image")
+            .unwrap();
+
+        let image_data :Vec<u8> = vec![0,1,2,3,4,5];
+        let project = db.add_project_image(&project, "junk.png", "A junk image", &image_data);
+        let project = project.unwrap();
+
+        assert_eq!(project.pictures.len(), 1);     // There is an image -- and only one.
+        let image = &project.pictures[0];
+        assert_eq!(image.project_id, project.project.id);
+        assert_eq!(image.name, "junk.png");
+        assert_eq!(image.description, "A junk image");
+        assert_eq!(image.contents, image_data);
+
+    }
 }
 
 #[cfg(test)]
