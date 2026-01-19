@@ -2457,7 +2457,15 @@ mod kiln_database_tests {
         assert_eq!(image.name, "junk.jpg");
         assert_eq!(image.description, "fake image");
         assert_eq!(image.contents, image_data2);
+    }
+    // The tests to add project steps and images, implicitly test get_project _except_ for
+    // when the requested project does not exist:
 
+    #[test]
+    fn get_project_1() {
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        let project = db.get_project("no such").unwrap();
+        assert!(project.is_none());
     }
 }
 
