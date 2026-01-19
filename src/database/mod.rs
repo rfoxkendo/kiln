@@ -241,6 +241,7 @@ impl FiringStep {
     }
     
 }
+
 impl KilnProgram {
     /// Create a new, empty kiln program.  A kil program is a firing sequencde
     /// defined within a kiln.  A such it has a kiln description, a firing sequencde
@@ -355,15 +356,15 @@ impl KilnProgram {
 ///   contents   BLOB -- The image file contents.
 /// )
 /// ```
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Project {
     id : u64,
     name : String,
     description : String
 }
 /// The firing steps associated with a project:
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct ProjectFiringSteps {
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct ProjectFiringStep {
     id : u64,
     project_id : u64,
     firing_sequence_id : u64,
@@ -371,24 +372,333 @@ pub struct ProjectFiringSteps {
 }
 
 /// A picture associated with a project:
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ProjectImage {
     id : u64,
     project_id : u64,
-    nme : String,
+    name : String,
     description : String,
     contents : Vec<u8>
 }
 
 /// A project fully unpacked from the database:
 /// 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct KilnProject {
     project : Project,
+    firing_comments : Vec<String>,  // Comments from the ProjectFiringStep(s).
     firings : Vec<KilnProgram>,
     pictures : Vec<ProjectImage>
 }
 
+impl Project {
+    /// Create a new project.
+    /// 
+    /// ### Parameters:
+    /// id - Id in the database.
+    /// name of the project - should be unique
+    /// description - Describes the project.
+    /// 
+    pub fn new(id : u64, name : &str, description : &str) -> Project {
+        Project {
+            id : id, 
+            name : name.into(),
+            description : description.into()
+        }
+    }
+    // Selectors:
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    pub fn description(&self) -> String {
+        self.description.clone()
+    }
+
+    // Mutators - we don't provide a public method to change the id as it's an immutable
+    // database thing
+
+    pub fn set_name(&mut self, new_name: &str) -> &mut Project{
+        self.name = new_name.into();
+        self
+    }
+    pub fn set_description(&mut self, new_desc : &str) -> &mut Project {
+        self.description = new_desc.into();
+        self
+    }
+
+}
+impl ProjectFiringStep {
+    ///
+    /// Create a project firing step.  A project firing step is
+    /// a kiln program run on a project.  Some projects may involve
+    /// more than one firing.   For example, a weave will first 
+    /// fire some pieces to a wavy mold (slump firing) and then,
+    /// after sliding straight pieces into the molded pieces a second
+    /// slump or tack step to flatten the weave.  Another example,
+    /// Dishes may require a tack step to create a design followed by
+    /// a slump into the dish mold.
+    /// 
+    /// This struct captures the database representatin of a firing step.
+    /// 
+    /// ### Parameters:
+    /// *   id - id of the project firing step.
+    /// *   project_id - id of the owning project.
+    /// *   firing_sequence_id - id of the firing sequence (which points to the steps and back to the kiln).
+    /// *   comment - Free text intended to describe why the firing was needed (e.g. final slump into dish mold).
+    /// 
+    /// ### Returns:
+    /// ProjectFIringStep
+    
+    pub fn new(id : u64, project : u64, firing : u64, comment : &str) -> ProjectFiringStep {
+        ProjectFiringStep {
+            id: id,
+            project_id : project,
+            firing_sequence_id : firing,
+            comment : comment.into()
+        }
+    }
+    // Selectors:
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }   
+    pub fn project_id(&self) -> u64 {
+        self.project_id
+    }
+    pub fn firing_sequence_id(&self) -> u64 {
+        self.firing_sequence_id
+    }
+    pub fn comment(&self) -> String {
+        self.comment.clone()
+    }
+
+    // Mutators - We can only modify the comment:
+
+    pub fn set_comment(&mut self, new_comment : &str) -> &mut ProjectFiringStep {
+        self.comment = new_comment.into();
+        self
+    }
+}
+
+impl ProjectImage {
+    ///
+    /// Projects can have images associated with them. Throughout the life cycle of 
+    /// a project, the artist might want to take pictures of the intermediate forms
+    /// and final result.    These are stored as poroject images.
+    /// 
+    /// ### Parameters:
+    /// * id - the image id in the database.
+    /// * project - the id of the project the image is associated with
+    /// * name  - Intended to be the original name of the image file.
+    /// * description - a description that provides context for the image e.g. "Pattern tacked to the blank"
+    //
+    /// 
+    /// The id and project are immutable, the name, description and contents
+    ///  can be modified via mutators.  The contents are initially empty
+    
+    pub fn new(id : u64, project : u64, name : &str, description : &str) -> ProjectImage {
+        ProjectImage {
+            id : id,
+            project_id : project,
+            name : name.into(),
+            description : description. into(),
+            contents : Vec::<u8>::new()
+        }
+    }
+    // Selectors (getters).
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+    pub fn project_id(&self) -> u64 {
+        self.project_id
+    }
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    pub fn description(&self) -> String {
+        self.description.clone()
+    }
+    pub fn contents(&self) -> Vec<u8> {
+        self.contents.clone()
+    }
+
+    // Mutators/setters, these chain.
+
+    pub fn set_name(&mut self, new_name : &str) -> &mut ProjectImage {
+        self.name = new_name.into();
+        self
+    }
+    pub fn set_description(&mut self, new_description : &str) -> &mut ProjectImage {
+        self.description = new_description.into();
+        self
+    }
+    pub fn set_contents(&mut self, new_contents : &Vec<u8>) -> &mut ProjectImage {
+        self.contents = new_contents.clone();
+        self
+    }
+
+}
+impl KilnProject {
+    ///
+    /// A kiln project is built up incrementally first from a 
+    /// project and then by adding firings and pictures too it.
+    /// The firings can be edited, just as they can be in a
+    /// kiln program, but once the project has been executed,
+    /// I strongly recommend against altering the firings as that
+    /// may cause the firings to not faithfully represent the project.
+    /// Editing should only be used to 
+    /// * Incrementally build up the set of firings as the project progresses
+    /// * Correct errors in recording which firings were used.
+    ///
+    pub fn new(project : &Project) -> KilnProject {
+        KilnProject {
+            project : project.clone(),
+            firing_comments : Vec::<String>::new(),
+            firings : Vec::<KilnProgram>::new(),
+            pictures : Vec::<ProjectImage>::new()
+        }
+    }
+    // Selectors. Note these give copies of the attributes.
+    // to change the use the mutators and editor methods.
+
+    pub fn project(&self) -> Project {
+        self.project.clone()
+    }
+    pub fn firing_comments(&self) -> Vec<String> {
+        self.firing_comments.clone()
+    }
+    pub fn firings(&self) -> Vec<KilnProgram> {
+        self.firings.clone()
+    }
+    pub fn pictures(&self) -> Vec<ProjectImage> {
+        self.pictures.clone()
+    }
+    // Convenience accessors of the vectors; note the
+    // mutators will ensure that firing_commands.len() == firings.len().
+
+    pub fn num_firings(&self) -> usize {
+        self.firings.len()
+    }
+    pub fn num_images(&self) -> usize {
+        self.pictures.len()
+    }
+    /// Get information about a firing:
+    /// 
+    /// ### Parameters:
+    /// * idx - firing number.
+    /// ### Returns
+    /// (String, KilnProgram) The string is the firing comment.
+    /// 
+    /// ### Note:
+    /// panics if the idx is not in the range of firings.
+    /// 
+    pub fn firing(&self, idx : usize) -> (String, KilnProgram) {
+        (self.firing_comments[idx].clone(), self.firings[idx].clone())
+    }
+    pub fn picture(&self, idx : usize) -> ProjectImage {
+        self.pictures[idx].clone()
+    }
+
+    // Mutators:
+
+    pub fn add_firing(&mut self, firing : &KilnProgram, comment :&str) -> &mut KilnProject {
+        self.firing_comments.push(comment.into());
+        self.firings.push(firing.clone());
+        self
+    }
+
+    pub fn add_picture(&mut self, picture : &ProjectImage) -> &mut KilnProject {
+        self.pictures.push(picture.clone());
+        self
+    }
+
+    // Project editor methods:
+
+    /// delete a firing and its associated comment.
+    /// 
+    /// ###  Parameters:
+    /// * idx - the index of the firing to delete
+    /// 
+    /// ### Returns
+    /// Result<(), DatabaseError>  On error, typically, the error returned is InvalidIndex
+    /// because the index was out of range.
+    /// 
+    pub fn delete_firing(&mut self, idx : usize) -> result::Result<(), DatabaseError> {
+        if idx < self.firings.len() {
+            // Note that firing_comments and firings have the same len by design.
+
+            self.firing_comments.remove(idx);
+            self.firings.remove(idx);
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(idx))
+        }
+        
+    }
+    /// Insert a new firing at the specified position.
+    /// Use len() to append or better yet, add_firing().
+    /// 
+    /// ### Parameters:
+    /// * idx     - the position at which to insert the firing.
+    /// * program - the kiln program to insert as a firing.
+    /// * comment - the firing comment.
+    /// 
+    /// ### Returns:
+    /// Result<(), DatabaseError> Normally an InvalidIndex if idx is bad.
+    
+    pub fn insert_firing(
+        &mut self, program : &KilnProgram, comment : &str, idx : usize
+    ) -> result::Result<(), DatabaseError> {
+        if idx <= self.firings.len() {
+            self.firings.insert(idx, program.clone());
+            self.firing_comments.insert(idx, comment.into());
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(idx))
+        }
+        
+    }
+    /// Remove an image from the project.
+    /// 
+    /// ### Parameters:
+    /// * idx - index of the image to remove.
+    /// 
+    /// ### Returns
+    /// Result<(),DatabaseError> - Normally the error is InvalidIndex if idx is bad.
+
+    pub fn delete_picture(&mut self, idx : usize) -> result::Result<(), DatabaseError> {
+        if idx < self.pictures.len() {
+            self.pictures.remove(idx);
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(idx))
+        }
+    }
+
+    ///
+    /// Insert an image into the project at a specific position.
+    /// 
+    /// ### Parameters:
+    /// * image - refernces the image to insert.
+    /// * idx   - Where to insert it.
+    /// 
+    /// ### Returns:
+    /// Result<(),DatabaseError> - Normally the error is InvalidIndex if idx is bad.
+    
+    pub fn insert_picture(&mut self, image : &ProjectImage, idx :usize) -> result::Result<(), DatabaseError> {
+        if idx <= self.pictures.len() {
+            self.pictures.insert(idx, image.clone());
+            Ok(())
+        } else {
+            Err(DatabaseError::InvalidIndex(idx))
+        }
+    }
+}
 /// This enum is the set of errors that can occur.
 /// 
 #[derive(Debug)]
@@ -400,6 +710,7 @@ pub enum DatabaseError {
     FailedDeserialization(String),
     NoSuchProgram((String, String)),
     InconsistentProgram((String, String)),
+    InconsistentProject(String),
     Unimplemented,
 }
 
@@ -415,6 +726,8 @@ impl Display for DatabaseError {
             write!(f, "Kiln {} has no program named {}", kiln, program),
         DatabaseError::InconsistentProgram((kiln, seq))=>
             write!(f, "Input kiln ({}) program ({}) is inconsistent with database", kiln, seq),
+        DatabaseError::InconsistentProject(n) =>
+            write!(f, "Input project {} is inconsistent", n), 
         DatabaseError::Unimplemented => write!(f, "This operation is not yet implemented")
     }
  }   
@@ -483,7 +796,7 @@ impl KilnDatabase {
         if let Err(e) = db.execute(
             " CREATE TABLE IF NOT EXISTS Project_firings (
                     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id         INTEGER -- FK to Project.
+                    project_id         INTEGER, -- FK to Project.
                     firing_sequence_id INTEGER, -- FK to Firing_squences
                     comment            TEXT  -- maybe why this firing.
                 )",
@@ -496,7 +809,7 @@ impl KilnDatabase {
         if let Err(e) = db.execute(
             "CREATE TABLE Project_images (
                     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id INTEGER -- FK to project.
+                    project_id INTEGER, -- FK to project.
                     name       TEXT,   -- Original filename e.. final.jpg
                     caption    TEXT, -- What the picture is.
                     contents   BLOB -- The image file contents.
@@ -515,6 +828,95 @@ impl KilnDatabase {
         let  row = rows.next().unwrap().unwrap();
 
         row.get_unwrap(0)
+    }
+
+    // For a project, get its firing steps and comments:
+    // Stub for now.
+    fn get_project_firing_steps(&mut self, project : &KilnProject) -> result::Result<Vec<(KilnProgram, String)>, DatabaseError> {
+        let project_id = project.project.id;
+        let mut result  : Vec<(KilnProgram, String)> = vec![];
+        let mut names_comments : Vec<(String, String, String)> = vec![];
+        {
+            let stmt = self.db.prepare(
+                "SELECT  Firing_sequences.name, Kilns.name, Project_firings.comment \
+                    FROM Project_firings 
+                    INNER JOIN Firing_sequences ON Firing_sequences.id = Project_firings.firing_sequence_id
+                    INNER JOIN Kilns ON Firing_sequences.kiln_id = Kilns.id
+                    WHERE Project_firings.project_id = ?
+                    ORDER BY Firing_sequences.id ASC
+                    "
+            );
+            if let Err(e) = stmt {
+                return Err(DatabaseError::SqlError(e));
+            }
+            // Do the query and get the rows if there's success.  For
+            // each row we get the associated kiln program and add it tothe result vector with the commment.
+
+            let mut stmt = stmt.unwrap();                  // must succeed.
+            let rows = stmt.query([project_id]);
+            if let Err(e) = rows {
+                return Err(DatabaseError::SqlError(e));
+            }
+            let mut rows = rows.unwrap();
+            
+
+            while let Ok(row) = rows.next() {
+                if let Some(r) = row {
+                    let fs_name : String = r.get_unwrap(0);
+                    let kiln_name :String = r.get_unwrap(1);
+                    let comment : String = r.get_unwrap(2);
+
+                    names_comments.push((kiln_name.clone(), fs_name.clone(), comment.clone()));
+
+
+                } else {
+                    break;                   // End of iteration?
+                }
+            }
+        }
+        // Now get the kiln programs:
+
+        for (kname, pname, comment) in names_comments {
+            let pgm = self.get_kiln_program(&kname, &pname);
+            if let Err(e) = pgm {
+                return Err(e);
+            }
+            let pgm = pgm.unwrap().unwrap();        // None is not an option given the query.
+            result.push((pgm.clone(), comment.clone()));
+        }
+
+        Ok(result)
+    }
+    // For a project, get its images
+    // 
+    fn get_project_images(&mut self, project: &KilnProject) -> result::Result<Vec::<ProjectImage>, DatabaseError> {
+        let stmt = self.db.prepare("
+            SELECT id, project_id, name, caption, contents, caption as description FROM Project_images
+            WHERE project_id = ?  ORDER BY id ASC
+        ");
+        if let Err(sqle) = stmt {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut stmt = stmt.unwrap();
+        let rows = stmt.query([project.project().id()]);
+        if let Err(sqle) = rows {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut rows = rows.unwrap();
+        let mut result = Vec::<ProjectImage>::new();
+        while let Ok(row) = rows.next() {
+            if let Some(r) = row {
+                let image = from_row::<ProjectImage>(&r);
+                if let Err(e) = image {
+                    return Err(DatabaseError::FailedDeserialization(format!("{} : {}", "Project Image", e)));
+                }
+                result.push(image.unwrap());
+            } else {
+                break;
+            }
+        }
+
+        Ok(result)
     }
 
     /// create a new database or open an existing one
@@ -939,6 +1341,245 @@ impl KilnDatabase {
             return Err(DatabaseError::SqlError(sqle));
         }     // 'must' succeed but...
         Ok(resulting_program)
+    }
+    // Suport for projects.
+
+    /// Add a new project to the database.  A project is a set of firing steps
+    /// which are intended to achieve a finished piece. Projects are added
+    /// to the database empty.  Later, firing steps and images can be added
+    /// to a project.
+    /// 
+    /// ### Parameters:
+    /// * name - a unique name for the project.
+    /// * description - a description of the project.
+    /// 
+    /// ### Returns:
+    /// Result<KilnProject, DatabaseError> - On success the empty kiln project is returned.
+    /// 
+    
+    pub fn add_project(&mut self, name : &str, description : &str) -> result::Result<KilnProject, DatabaseError> {
+
+        // Check the uniqueness of the project name:
+
+        if self.get_count("SELECT COUNT(*) FROM Projects WHERE name=?",[name]) > 0 {
+            return Err(DatabaseError::DuplicateName(name.into()));
+        }
+        // Make the project in the database.
+
+        let status = self.db.execute(
+            "INSERT INTO Projects (name, description) VALUES (?,?)",
+            [name, description]
+        );
+        if let Err(sqle) = status {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        // Success so make the project and the KilnProject:
+
+        let project = Project::new(self.db.last_insert_rowid() as u64, name, description);
+        Ok(KilnProject::new(&project))
+
+    
+    }
+    /// List the names of all of the projects that have been defined... in alpha order.
+    /// 
+    /// ### Returns
+    /// Result<Vec<String>, DatabaseError> where on success the vector contains the project names.
+    /// 
+    pub fn list_projects(&mut self) -> result::Result<Vec<String>, DatabaseError> {
+        let status = self.db.prepare("
+            SELECT name FROM Projects order by name ASC
+        ");
+        if let Err(sqle) = status {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut query = status.unwrap();
+        let status = query.query([]);
+        if let Err(sqle) = status {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut rows = status.unwrap();
+        let mut result : Vec<String> = Vec::new();
+        while let Ok(row) = rows.next() {
+            if let Some(r) = row {
+                result.push(r.get_unwrap(0));
+            } else {
+                break;
+            }
+        }
+
+
+        Ok(result)
+    }
+    ///
+    /// Return the full project definition given a project name.
+    /// 
+    /// ### Parameters:
+    /// * name -name of the project.
+    /// 
+    /// ### Returns:
+    /// 
+    /// Result<Option<KilnProject>, DatabaseError> :
+    /// *  Error if unable to execute the queries.
+    /// *  None if there's no such project.
+    /// *  Some containing the project definition.
+    
+    pub fn get_project(&mut self, name : &str) -> result::Result<Option<KilnProject>, DatabaseError> {
+        // This block allows the root_query to drop which prevents us from havig an immutable
+        // borrow of self when we need mutable borrows to get the firings and images later on.
+
+        let mut full_project = {
+            let root_query = self.db.prepare(
+                "SELECT id, name, description FROM Projects 
+                WHERE name = ?"
+            );
+            if let Err(sqle) = root_query {
+                return Err(DatabaseError::SqlError(sqle));
+            }
+            let mut root_query = root_query.unwrap();
+            let root_rows = root_query.query([name]);
+            if let Err(sqle) = root_rows {
+                return Err(DatabaseError::SqlError(sqle));
+            }
+            let mut  root_rows = root_rows.unwrap();
+            let row = root_rows.next();
+            if let Err(sqle) = row {
+                return Err(DatabaseError::SqlError(sqle));
+            }
+            let row = row.unwrap();
+            if let None = row {
+                return Ok(None);
+            }
+            let row = row.unwrap();
+            let project = from_row::<Project>(&row);
+            if let Err(e) = project {
+                return Err(DatabaseError::FailedDeserialization(format!("{} : {}", "Project", e)));
+            }
+
+            KilnProject::new(&project.unwrap())
+        };
+
+        // Fold in the firings:
+
+        let firings = self.get_project_firing_steps(&full_project);
+        if let Err(e) = firings {
+            return Err(e);
+        }
+        for firing in firings.unwrap() {
+            full_project.add_firing(&firing.0, &firing.1);
+        }
+        // Fold in the images:
+
+        let images = self.get_project_images(&full_project);
+        if let Err(e) = images {
+            return Err(e);
+        }
+        for image in images.unwrap() {
+            full_project.add_picture(&image);
+        }
+        Ok(Some(full_project))
+    }
+
+
+    ///
+    /// Add a new firing for a project.  A firing is  kiln program defined on a kiln.
+    /// It's a project step.  A project may require more than one firing.  For example,
+    /// A simple dish might require a tack step to add a design to the blank and then a slump
+    /// step into the mold 
+    /// 
+    /// ### Parameters:
+    /// * project - the kiln project we're adding a step to.
+    /// * kiln    - Name of the kiln we're firing in.
+    /// * program - Name of that kiln's firing program used for the Firing.
+    /// * comment - Might give the reason for this firing.
+    /// 
+    /// ### Returns:
+    /// 
+    /// Result<KilnProject, DatabaseError> - On success, the updtaed kiln program.
+    /// 
+    pub fn add_project_firing(
+        &mut self, project : &KilnProject, kiln_name : &str, program_name : &str, comment : &str
+    ) -> result::Result<KilnProject, DatabaseError> {
+        let program = self.get_kiln_program(kiln_name, program_name);
+        if let Err(e) = program {
+            return Err(e);
+        }
+        let program = program.unwrap();
+        if let None = program {
+            return Err(DatabaseError::NoSuchProgram((kiln_name.into(), program_name.into()))); 
+        }
+        let program = program.unwrap();
+        
+        // The database project must exist and must match our input project.
+
+        let db_project = self.get_project(&project.project().name());
+        if let Err(e) = db_project {
+            return Err(e);
+        }
+        let db_project = db_project.unwrap();
+        if let None = db_project {
+            return Err(DatabaseError::NoSuchName(project.project().name()));
+        }
+        let db_project = db_project.unwrap();
+
+        if db_project.project().id() != project.project().id() {
+            return Err(DatabaseError::InconsistentProject(project.project().name()));
+        }
+        // Add the program to the project in the database.
+
+        let result = self.db.execute(
+            "INSERT INTO Project_firings (project_id, firing_sequence_id, comment)
+                        VALUES(?,?,?)
+            ",
+            [project.project.id().to_string(), program.sequence().id().to_string(), comment.into()]
+        );
+        if let Err(sqle) = result {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        // Update the project from the database:
+
+        let updated_project = self.get_project(&project.project.name);
+        if let Err(e) = updated_project {
+            return Err(e);
+        }
+        let updated_project = updated_project.unwrap().unwrap();      // Must work.
+        Ok(updated_project)
+
+
+    }
+    /// Add an image to a project.
+    /// 
+    /// ### Parameters
+    ///    project - references the kiln project to modify as it is so far.
+    ///    image_name  - Name of an image to add... this is usually the name of the file from which the data came.
+    ///    description - Description of the image (e.g. "After initial cuttin before fring with Tack fuse").
+    ///    image_data  - The data that makes up the image.
+    /// 
+    /// ### Returns
+    /// Result<KilnProject, DatabaseError> - the updated project on success.
+    /// 
+    pub fn add_project_image(
+        &mut self, project : &KilnProject,
+        image_name : &str, 
+        description : &str, 
+        image_data : &Vec<u8>) -> result::Result<KilnProject, DatabaseError> {
+        
+        let project_id = project.project.id;
+        let status = self.db.execute(
+            "INSERT INTO Project_images
+                (project_id, name, caption, contents) VALUES (?,?,?,?)
+            ", (project_id, image_name, description, image_data)
+        );
+        if let Err(e) = status {
+            return Err(DatabaseError::SqlError(e));
+        }
+        // Return the result of get_project on the current project name.
+
+        let final_project = self.get_project(&(project.project.name));
+        if let Err(e) = final_project {
+            return Err(e);
+        }
+
+        Ok(final_project.unwrap().unwrap())
     }
 }
 
@@ -1582,6 +2223,319 @@ mod kiln_database_tests {
         assert_eq!(got_program, updated_program);    // Should be the same!
 
     }
+    // Tests for Kiln projects.
+
+    #[test]
+    fn add_project_1() {
+        // success:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        let result = db.add_project("Test Project", "A test Project");
+        let result = result.unwrap();    // Better errror message than assert if it's not ok.
+
+        assert_eq!(result.project().name(), "Test Project");
+        assert_eq!(result.project().description(), "A test Project");
+
+        let id = db.db.last_insert_rowid();  
+        assert_eq!(result.project().id(), id as u64);
+
+        // No firings and no images:
+
+        assert_eq!(result.firing_comments.len(), 0);
+        assert_eq!(result.firings.len(), 0);
+        assert_eq!(result.pictures.len(), 0);
+    }
+    #[test]
+    fn add_project_2() {
+        // Duplicate project name is bad:
+
+     let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        let result = db.add_project("Test Project", "A test Project");
+        result.unwrap();    // Better errror message than assert if it's not ok.
+
+        let result = db.add_project("Test Project", "A faild project insert");
+        if let Err(e) = result {
+            if let DatabaseError::DuplicateName(n) = e {
+                assert_eq!(n, "Test Project");
+            } else {
+                assert!(false, "Expected duplicate name error, got : {}", e);
+            }
+        } else {
+            assert!(false, "Expected a database error but was ok.");
+        }
+    }
+    // Can add firings to kiln programs:
+
+    #[test]
+    fn add_firing_1() {
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        // Add a kiln and a firing sequence to the kiln.
+        db.add_kiln("Big", "A big kiln").unwrap();
+        let mut program = db.add_kiln_program("Big", "program", "A program").unwrap();
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 900, 10 ));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1200, 5));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1400, 10));
+        program.add_step(&FiringStep::new(0, 0, RampRate::AFAP, 1000, 30));
+        db.update_kiln_program(&program).unwrap();
+
+        // Make a project and add a firing:
+
+        let project = db.add_project("AProject", "A test project").unwrap();
+
+        // Add the step:
+
+        let project = 
+            db.add_project_firing(&project, "Big", "program", "The first firing");
+        let project = project.unwrap();
+        
+
+        // The base stuff should still be there but there also should be a firing and a riging comment.
+
+        assert_eq!(project.project.name(), "AProject");
+        assert_eq!(project.project.description(), "A test project");
+        
+        assert_eq!(project.firing_comments.len(), 1);  
+        assert_eq!(project.firing_comments[0], "The first firing");
+
+        assert_eq!(project.firings.len(), 1);
+
+        let firing = project.firings[0].clone();
+        assert_eq!(firing.steps.len(), 4);      // The firing consists of 4 steps.
+
+        // Since the ids won't match we need to do this the hard way
+
+        assert_eq!(firing.steps[0].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing.steps[0].target_temp(), 900);
+        assert_eq!(firing.steps[0].dwell_time(), 10);
+
+        assert_eq!(firing.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing.steps[1].target_temp(), 1200);
+        assert_eq!(firing.steps[1].dwell_time(), 5);
+
+        assert_eq!(firing.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing.steps[2].target_temp(), 1400);
+        assert_eq!(firing.steps[2].dwell_time(), 10);
+
+        assert_eq!(firing.steps[3].ramp_rate(), RampRate::AFAP);
+        assert_eq!(firing.steps[3].target_temp(), 1000);
+        assert_eq!(firing.steps[3].dwell_time(), 30);
+    }
+    #[test]
+    fn add_firing_2() {
+        // No such firing sequence...
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        // Add a kiln and a firing sequence to the kiln.
+        db.add_kiln("Big", "A big kiln").unwrap();
+        let project = db.add_project("AProject", "A test project").unwrap();
+
+        // Add the step:
+
+        let project = 
+            db.add_project_firing(&project, "Big", "program", "The first firing");
+        
+        assert!(project.is_err());
+    }
+    #[test]
+    fn add_firing_3() {
+        // can add more than one firing sequence to the project.
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        // Add a kiln and a firing sequence to the kiln. Kinda like a full fuse.
+        db.add_kiln("Big", "A big kiln").unwrap();
+        let mut program = db.add_kiln_program("Big", "program", "A program").unwrap();
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 900, 10 ));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1200, 5));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1400, 10));
+        program.add_step(&FiringStep::new(0, 0, RampRate::AFAP, 1000, 30));
+        db.update_kiln_program(&program).unwrap();
+
+        // And another.. kind of like a slump.
+        let mut program = 
+            db.add_kiln_program("Big", "second", "Simple slump")
+            .unwrap();
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(250), 900, 10));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(250), 1250, 30));
+        program.add_step(&FiringStep::new(0,0, RampRate::AFAP, 1000, 60));
+        db.update_kiln_program(&program).unwrap();
+
+
+        // Make project with first a full fuse then a slump:
+
+        let project = db
+            .add_project("Compound", "A project with two firing steps")
+            .unwrap();
+        let project = db.add_project_firing(&project, "Big", "program", "Full fuse step").unwrap();
+        let project = db.add_project_firing(&project, "Big", "second", "Slump into mold").unwrap();
+
+        // CHeck the steps, add_firing_1 determined(?) that everything else is good.
+
+        assert_eq!(project.firing_comments.len(), 2);  // Ezach firing has a comment and no more.
+        assert_eq!(project.firing_comments[0], "Full fuse step");
+        assert_eq!(project.firing_comments[1], "Slump into mold");
+
+        let firings = &project.firings;
+        assert_eq!(firings.len(), 2);
+        let firing1 = firings[0].clone();
+        let firing2 = firings[1].clone();
+
+        assert_eq!(firing1.steps.len(), 4);      // The firing consists of 4 steps.
+
+        
+        
+        // Since the ids won't match we need to do this the hard way
+
+        assert_eq!(firing1.steps[0].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing1.steps[0].target_temp(), 900);
+        assert_eq!(firing1.steps[0].dwell_time(), 10);
+
+        assert_eq!(firing1.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing1.steps[1].target_temp(), 1200);
+        assert_eq!(firing1.steps[1].dwell_time(), 5);
+
+        assert_eq!(firing1.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing1.steps[2].target_temp(), 1400);
+        assert_eq!(firing1.steps[2].dwell_time(), 10);
+
+        assert_eq!(firing1.steps[3].ramp_rate(), RampRate::AFAP);
+        assert_eq!(firing1.steps[3].target_temp(), 1000);
+        assert_eq!(firing1.steps[3].dwell_time(), 30);
+
+
+        assert_eq!(firing2.steps.len(), 3);
+
+        assert_eq!(firing2.steps[0].ramp_rate(), RampRate::DegPerSec(250));
+        assert_eq!(firing2.steps[0].target_temp(), 900);
+        assert_eq!(firing2.steps[0].dwell_time(), 10);
+
+        assert_eq!(firing2.steps[1].ramp_rate(), RampRate::DegPerSec(250));
+        assert_eq!(firing2.steps[1].target_temp(), 1250);
+        assert_eq!(firing2.steps[1].dwell_time(), 30);
+
+        assert_eq!(firing2.steps[2].ramp_rate(), RampRate::AFAP);
+        assert_eq!(firing2.steps[2].target_temp(), 1000);
+        assert_eq!(firing2.steps[2].dwell_time(), 60);
+
+
+
+    }
+
+    // Tests for adding images to projects.  
+
+    #[test]
+    fn add_project_image_1() {
+        // add a single image to a project:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        
+        // Make project with first a full fuse then a slump:
+
+        let project = db
+            .add_project("Images", "A project with an image")
+            .unwrap();
+
+        let image_data :Vec<u8> = vec![0,1,2,3,4,5];
+        let project = db.add_project_image(&project, "junk.png", "A junk image", &image_data);
+        let project = project.unwrap();
+
+        assert_eq!(project.pictures.len(), 1);     // There is an image -- and only one.
+        let image = &project.pictures[0];
+        assert_eq!(image.project_id, project.project.id);
+        assert_eq!(image.name, "junk.png");
+        assert_eq!(image.description, "A junk image");
+        assert_eq!(image.contents, image_data);
+
+    }
+    #[test]
+    fn add_project_image_2() {
+        // add more than one image.
+
+         let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        
+        // Make project with first a full fuse then a slump:
+
+        let project = db
+            .add_project("Images", "A project with an image")
+            .unwrap();
+
+        let image_data1 :Vec<u8> = vec![0,1,2,3,4,5];
+        let project = db
+            .add_project_image(&project, "junk.png", "A junk image", &image_data1)
+            .unwrap();
+        
+        let image_data2 : Vec<u8> = vec![5,4,3,2,1,0];
+        let project = db
+            .add_project_image(&project, "junk.jpg", "fake image", &image_data2)
+            .unwrap();
+
+
+        assert_eq!(project.pictures.len(), 2);     // There is an image -- and only one.
+        let image = &project.pictures[0];
+        assert_eq!(image.project_id, project.project.id);
+        assert_eq!(image.name, "junk.png");
+        assert_eq!(image.description, "A junk image");
+        assert_eq!(image.contents, image_data1);
+
+        let image = &project.pictures[1];
+        assert_eq!(image.name, "junk.jpg");
+        assert_eq!(image.description, "fake image");
+        assert_eq!(image.contents, image_data2);
+    }
+    // The tests to add project steps and images, implicitly test get_project _except_ for
+    // when the requested project does not exist:
+
+    #[test]
+    fn get_project_1() {
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        let project = db.get_project("no such").unwrap();
+        assert!(project.is_none());
+    }
+    // Tests for list_projects:
+
+    #[test]
+    fn list_projects_1() {
+        // none initially.
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        let list = db.list_projects().unwrap();
+
+        assert_eq!(list.len(), 0);
+    }
+    #[test]
+    fn list_projects_2() {
+        // there is one project:
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_project("First project", "for tests").unwrap();
+
+        let list = db.list_projects().unwrap();
+
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0], "First project");
+    }
+    #[test]
+    fn list_project_3() {
+        // there are a few and they come out in order:
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        db.add_project("First project", "for tests").unwrap();
+        db.add_project("Another Project", "SHould list first").unwrap();
+        db.add_project("Final project", "Should come out second!").unwrap();
+
+        let list = db.list_projects().unwrap();
+
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0], "Another Project");
+        assert_eq!(list[1], "Final project");
+        assert_eq!(list[2], "First project");
+
+    }
+
 }
 
 #[cfg(test)]
@@ -2134,3 +3088,274 @@ mod kiln_program_tests {
     }
 
 }
+#[cfg(test)]
+mod project {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        let project =Project::new(1, "Test Project", "A test project");
+        assert_eq!(
+            project, Project { id: 1, name: "Test Project".into(), description: "A test project".into()}
+        );
+    }
+    // Test the selector/getters
+    #[test]
+    fn id_1() {
+        let project =Project::new(1, "Test Project", "A test project");
+        assert_eq!(1, project.id());
+    }
+    #[test]
+    fn name_1() {
+        let project =Project::new(1, "Test Project", "A test project");
+        assert_eq!(project.name(), "Test Project");
+    }
+    #[test]
+    fn description_1() {
+        let project =Project::new(1, "Test Project", "A test project");
+        assert_eq!(project.description(), "A test project");
+    }
+    // Test the mutator/setters.
+    #[test]
+    fn set_name_1() {
+        let mut  project =Project::new(1, "Test Project", "A test project");
+        project.set_name("New name");
+        assert_eq!(project.name(), "New name");
+
+    }
+    #[test]
+    fn set_description_1() {
+        let mut project =Project::new(1, "Test Project", "A test project");
+        project.set_description("A description");
+        assert_eq!(project.description(), "A description");
+    }
+    // Test chaining
+
+    #[test]
+    fn chain_1() {
+        let mut project =Project::new(1, "Test Project", "A test project");
+        project.set_name("Name").set_description("Desc");
+
+        assert_eq!(project.name(), "Name");
+        assert_eq!(project.description(), "Desc");
+    }
+    #[test]
+    fn chain_2() {
+        let mut project =Project::new(1, "Test Project", "A test project");
+        project.set_description("Desc").set_name("Name");
+
+
+        assert_eq!(project.name(), "Name");
+        assert_eq!(project.description(), "Desc");
+    }
+
+}
+
+#[cfg(test)]
+mod project_firing_step_tests {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        let pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        assert_eq!(
+            pstep,
+            ProjectFiringStep {
+                id : 1, project_id : 2, firing_sequence_id : 3, 
+                comment : "A step".into()
+            }
+        );
+    }
+    // Selector/getters tests:
+    #[test]
+    fn id_1()  {
+        let pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        assert_eq!(pstep.id(), 1);
+    }
+    #[test]
+    fn project_id_1() {
+        let pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        assert_eq!(pstep.project_id(), 2);
+    }
+    #[test]
+    fn firing_sequence_id_1() {
+        let pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        assert_eq!(pstep.firing_sequence_id(), 3);
+    }
+    #[test]
+    fn comment_1() {
+        let pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        assert_eq!(pstep.comment(), "A step");
+    }
+    // mutator/setter test.
+
+    #[test]
+    fn set_comment_1() {
+        let mut pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        pstep.set_comment("A new comment");
+        assert_eq!(pstep.comment(), "A new comment");
+    }
+    #[test]
+    fn set_comment_2() {
+        // mutators chain:
+
+        let mut pstep = ProjectFiringStep::new(1, 2, 3, "A step");
+        pstep
+            .set_comment("An intermediate comment")
+            .set_comment("The final comment");
+    
+        assert_eq!(pstep.comment(), "The final comment");
+    }
+}
+#[cfg(test)]
+mod project_image_tests {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(
+            im,
+            ProjectImage {
+                id : 1, 
+                project_id : 2, 
+                name : "Image.jpeg".into(),
+                description: "The pieces".into(),
+                contents : vec![]
+            }
+        );
+    }
+    // Test selectors/getters.
+
+    #[test]
+    fn id_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(im.id(), 1);
+    }
+    #[test]
+    fn project_id_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(im.project_id(), 2);
+    }
+    #[test]
+    fn name_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(im.name(), "Image.jpeg");
+    }
+    #[test]
+    fn description_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(im.description, "The pieces");
+    }
+    #[test]
+    fn contents_1() {
+        let im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        assert_eq!(im.contents(), vec![]);
+    }
+    // Test mutators.
+
+    #[test]
+    fn set_name_1() {
+         let mut im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+         im.set_name("New name");
+         assert_eq!(im.name(), "New name");
+    }
+    #[test]
+    fn set_description_1() {
+        let mut im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        im.set_description("something else");
+        assert_eq!(im.description(), "something else");
+
+    }
+    #[test]
+    fn set_contents_1() {
+        let mut im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        let data : Vec<u8> = vec![1,2,3,4,5];
+        im.set_contents(&data);
+        assert_eq!(im.contents(), data);
+    }
+
+    #[test]
+    fn chain_1() {
+        let mut im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        let data : Vec<u8> = vec![1,2,3,4,5];
+        im.set_name("name").set_description("description").set_contents(&data);
+
+        assert_eq!(im.name(), "name");
+        assert_eq!(im.description(), "description");
+        assert_eq!(im.contents(), data);
+    }
+    #[test]
+    fn chain_2() {
+        // just need to also be sure that set contents chains:
+        let mut im = ProjectImage::new(1, 2, "Image.jpeg", "The pieces");
+        let data : Vec<u8> = vec![1,2,3,4,5];
+
+        im.set_contents(&data).set_name("new name");
+        assert_eq!(im.contents(), data);
+        assert_eq!(im.name(), "new name");
+    }
+}
+#[cfg(test)]
+mod kiln_project_tests {
+    use super::*;
+
+    #[test]
+    fn new_1() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(
+            kp, KilnProject {
+                project : project,
+                firing_comments : vec![],
+                firings : vec![],
+                pictures : vec![]
+            }
+        );
+    }
+    #[test]
+    fn project_1() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(kp.project(), project);
+    }
+    //Not we'll have more tests when we get around to editing the project.
+    #[test]
+    fn firing_comments() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(
+            kp.firing_comments(), Vec::<String>::new()
+        );
+    }
+    #[test]
+    fn firings_1() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(
+            kp.firings(), Vec::<KilnProgram>::new()
+        );
+    }
+    #[test]
+    fn pictures_1(){
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(
+            kp.pictures(), Vec::<ProjectImage>::new()
+        );
+    }
+    #[test]
+    fn num_firings_1() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(kp.num_firings(), 0);
+    }
+    #[test]
+    fn num_imgaes() {
+        let project = Project::new(1, "Aproject", "test Project");
+        let kp = KilnProject::new(&project);
+        assert_eq!(kp.num_images(), 0);
+    }
+
+}
+
