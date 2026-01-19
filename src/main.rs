@@ -20,8 +20,14 @@ enum Commands {
         operation : String,
         args      : Vec<String>
     },
-    Program {},
-    Project {}
+    Program {
+        operation : String,
+        args      : Vec<String>
+    },
+    Project {
+        operation : String,
+        args      : Vec<String>
+    }
     
 }
 fn main() {
@@ -33,9 +39,12 @@ fn main() {
 
     let command = cli.command;
     match command {
-        Commands::Kiln{operation: operation, args: args} => kiln(&mut db, &operation, args),
-        Program    => println!("program"),
-        Project => println!("project")
+        Commands::Kiln{operation: operation, args: args} => 
+            kiln(&mut db, &operation, args),
+        Commands::Program {operation: op, args: args}    => 
+            println!("program {} {:?}", op, args),
+        Commands::Project { operation: op, args: args} => 
+            println!("project {} {:?}", op, args),
     };
     
 }
