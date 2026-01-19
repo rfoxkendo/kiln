@@ -2422,6 +2422,43 @@ mod kiln_database_tests {
         assert_eq!(image.contents, image_data);
 
     }
+    #[test]
+    fn add_project_image_2() {
+        // add more than one image.
+
+         let mut db = KilnDatabase::new(":memory:").unwrap();
+
+        
+        // Make project with first a full fuse then a slump:
+
+        let project = db
+            .add_project("Images", "A project with an image")
+            .unwrap();
+
+        let image_data1 :Vec<u8> = vec![0,1,2,3,4,5];
+        let project = db
+            .add_project_image(&project, "junk.png", "A junk image", &image_data1)
+            .unwrap();
+        
+        let image_data2 : Vec<u8> = vec![5,4,3,2,1,0];
+        let project = db
+            .add_project_image(&project, "junk.jpg", "fake image", &image_data2)
+            .unwrap();
+
+
+        assert_eq!(project.pictures.len(), 2);     // There is an image -- and only one.
+        let image = &project.pictures[0];
+        assert_eq!(image.project_id, project.project.id);
+        assert_eq!(image.name, "junk.png");
+        assert_eq!(image.description, "A junk image");
+        assert_eq!(image.contents, image_data1);
+
+        let image = &project.pictures[1];
+        assert_eq!(image.name, "junk.jpg");
+        assert_eq!(image.description, "fake image");
+        assert_eq!(image.contents, image_data2);
+
+    }
 }
 
 #[cfg(test)]
