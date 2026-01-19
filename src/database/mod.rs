@@ -1380,7 +1380,36 @@ impl KilnDatabase {
 
     
     }
-    
+    /// List the names of all of the projects that have been defined... in alpha order.
+    /// 
+    /// ### Returns
+    /// Result<Vec<String>, DatabaseError> where on success the vector contains the project names.
+    /// 
+    pub fn list_projects(&mut self) -> result::Result<Vec<String>, DatabaseError> {
+        let status = self.db.prepare("
+            SELECT name FROM Projects order by name ASC
+        ");
+        if let Err(sqle) = status {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut query = status.unwrap();
+        let status = query.query([]);
+        if let Err(sqle) = status {
+            return Err(DatabaseError::SqlError(sqle));
+        }
+        let mut rows = status.unwrap();
+        let mut result : Vec<String> = Vec::new();
+        while let Ok(row) = rows.next() {
+            if let Some(r) = row {
+                result.push(r.get_unwrap(0));
+            } else {
+                break;
+            }
+        }
+
+
+        Ok(result)
+    }
     ///
     /// Return the full project definition given a project name.
     /// 
@@ -2466,6 +2495,17 @@ mod kiln_database_tests {
         let mut db = KilnDatabase::new(":memory:").unwrap();
         let project = db.get_project("no such").unwrap();
         assert!(project.is_none());
+    }
+    // Tests for list_projects:
+
+    #[test]
+    fn list_projects_1() {
+        // none initially.
+
+        let mut db = KilnDatabase::new(":memory:").unwrap();
+        let list = db.list_projects().unwrap();
+
+        assert_eq!(list.len(), 0);
     }
 }
 
