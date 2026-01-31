@@ -42,13 +42,16 @@ fn main() {
         Commands::Kiln{operation: operation, args: args} => 
             kiln(&mut db, &operation, args),
         Commands::Program {operation: op, args: args}    => 
-            println!("program {} {:?}", op, args),
+            program(&mut db, &op, args ),        
         Commands::Project { operation: op, args: args} => 
             println!("project {} {:?}", op, args),
     };
     
 }
-
+// Process the kiln command:
+//  kiln create name [description]    # Define a new kiln.
+//  kiln list                         # List the names of all kilns.
+//  kiln info kiln-name               # Describe the named kiln.
 fn kiln(db : &mut database::KilnDatabase, operation : &str, kiln_info : Vec<String>) {
     if operation == "list" {
         let kiln_list = db.list_kilns().unwrap();
@@ -83,5 +86,26 @@ fn kiln(db : &mut database::KilnDatabase, operation : &str, kiln_info : Vec<Stri
 
     } else {
         eprintln!("Invalid kiln subcommand");
+    }
+}
+// Manipulate kiln programs:
+// program create name kiln-name [description] # Define a new program on a kiln.
+// program list kiln-name                      # Lists the names of program on a kiln.
+// program info kiln-name program-name         # Describes a program on a kiln:
+// program add-step kiln-name program-name ramp target dwell # Adds a step to a kiln program.
+//       Note that 'ramp' can be AFAP for as fast as possible else deg/sec integer.
+//       Note that target is integer degrees.
+//       Note that dwell time is integer minutes.
+fn program(db : &mut database::KilnDatabase, operation : &str, args : Vec<String>) {
+    if operation == "create" {
+        
+    } else if operation == "list" {
+
+    } else if operation == "info" {
+
+    } else if operation == "add-step" {
+
+    } else {
+        eprintln!("Invalid 'program' subcommand: '{}'", operation);
     }
 }
