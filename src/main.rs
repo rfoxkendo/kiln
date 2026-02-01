@@ -160,9 +160,81 @@ fn program(db : &mut database::KilnDatabase, operation : &str, args : Vec<String
         }
 
     } else if operation == "add-step" {
-
+        add_program_step(db, args);              // Complex enough to deserve its own function.
     } else {
         eprintln!("Invalid 'program' subcommand: '{}'", operation);
+    }
+}
+
+// Add a step to a kiln program
+
+fn add_program_step(db : &mut database::KilnDatabase, args : Vec<String>) {
+    // We need a kiln, program, ramp-rate, target and dwell.
+    // The ramp-rate can be either "AFAP" or an integer degreees/hr.
+
+    if args.len() != 5 {
+        eprintln!("program add-step needs a kiln, a program-name, ramp-rate, target-temp and hold-time");
+        exit(-1);
+    }
+    let kiln = args[0].clone();
+    let program = args[1].clone();
+
+    // Figure out the ramp rate:
+
+    let ramp_rate = if args[2] == "AFAP" {
+        database::RampRate::AFAP
+    } else  {
+        if let Ok(rate) = args[2].parse::<u32>() {
+            database::RampRate::DegPerHr(rate)
+        } else {
+            eprintln!("Ramp rate must be either an integer or 'AFAP' not {}", args[2]);
+            exit(-1);
+        }
+    };
+    let target = match args[3].parse::<u32>() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!(
+                "Failed to convert ramp target {} to an unsigned value {}", 
+                args[3], e
+            );
+            exit(-1);
+        },
+    };
+
+    let dwell = match args[4].parse::<u32>() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!(
+                "Unable to convert dwell time {} to an unsigned integer valueu {}",
+                args[4], e
+            );
+            exit(-1);
+        },
+    };
+
+    // Get the current definition (if we can) then add the step:
+
+    let program_info = db.get_kiln_program(&kiln, &program);
+    if let Err(e) = program_info {
+        eprintln!("Unable to fetch program {} on kiln {}: {}", kiln, program, e);
+        exit(-1);
+    }
+    let program_info = program_info.unwrap();
+    if let None = program_info {
+        eprintln!("No such program {} on kiln {}", kiln, program);
+    }
+    let mut program_info = program_info.unwrap();
+
+    let new_step = database::FiringStep::new(0,0, ramp_rate, target, dwell);
+    program_info.add_step(&new_step);
+
+    if let Err(e) = db.update_kiln_program(&program_info) {
+        eprintln!(
+            "Could not add a step to the program {} in kiln {}: {}",
+            program, kiln, e
+        );
+        exit(-1);
     }
 }
 
@@ -176,7 +248,7 @@ fn print_program(name : &str, pgm : &database::KilnProgram) {
         println!("Firing steps:");
         for step in steps  {
             println!(
-                "Ramp at {} deg/sec until {} deg hold for {} minutes",
+                "Ramp at {} deg/hr until {} deg hold for {} minutes",
                 step.ramp_rate(), step.target_temp(), step.dwell_time()
             );
         }

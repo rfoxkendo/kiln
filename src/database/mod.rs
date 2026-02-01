@@ -110,13 +110,13 @@ pub struct FiringStep {
 }
 #[derive(Clone, PartialEq, Debug)]
 pub enum RampRate {
-    DegPerSec(u32),
+    DegPerHr(u32),
     AFAP                 // As fast as possible
 }
 impl Display for RampRate {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
-            RampRate::DegPerSec(n) => write!(f, "{}", n),
+            RampRate::DegPerHr(n) => write!(f, "{}", n),
             RampRate::AFAP => write!(f, "AFAP")
         }
     }
@@ -191,7 +191,7 @@ impl FiringStep {
     /// FiringStep.
     pub fn new(id : u64, sequence : u64, rate : RampRate, target : u32, dwell : u32) -> FiringStep {
         let ramp_rate = match  rate {
-            RampRate::DegPerSec(r) => r as i32,
+            RampRate::DegPerHr(r) => r as i32,
             RampRate::AFAP => -1         // Flag for AFAP.
         };
 
@@ -213,7 +213,7 @@ impl FiringStep {
     }
     pub fn ramp_rate(&self) -> RampRate {
         if self.ramp_rate >= 0 {
-            RampRate::DegPerSec(self.ramp_rate as u32)
+            RampRate::DegPerHr(self.ramp_rate as u32)
         } else {
             RampRate::AFAP
         }
@@ -229,7 +229,7 @@ impl FiringStep {
 
     pub fn set_ramp_rate(&mut self, new_rate : RampRate) {
         match new_rate {
-            RampRate::DegPerSec(n) => self.ramp_rate = n as i32,
+            RampRate::DegPerHr(n) => self.ramp_rate = n as i32,
             RampRate::AFAP => self.ramp_rate = -1
         };
     }
@@ -1317,7 +1317,7 @@ impl KilnDatabase {
             let mut step_sql = step_sql.unwrap();
             let seqid = seq.id();                      // Notationally convenient.
             for step in program.steps() {
-                let ramp = if let RampRate::DegPerSec(n) = step.ramp_rate() {
+                let ramp = if let RampRate::DegPerHr(n) = step.ramp_rate() {
                     n as i32
                 } else {
                     -1
@@ -1970,7 +1970,7 @@ mod kiln_database_tests {
 
         // Note the step id and seq id are gotten from the database and program respectively.
         program_added.add_step(
-            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+            &FiringStep::new(0, 0, RampRate::DegPerHr(300), 1000, 10)
         );
 
         // Update the program in the database with this single step:
@@ -1988,7 +1988,7 @@ mod kiln_database_tests {
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0].id(), 1);    // first one added.
         assert_eq!(steps[0].sequence_id(), updated_program.sequence().id());
-        assert_eq!(steps[0].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(steps[0].ramp_rate(), RampRate::DegPerHr(300));
         assert_eq!(steps[0].target_temp(), 1000);
         assert_eq!(steps[0].dwell_time(), 10);
 
@@ -2009,7 +2009,7 @@ mod kiln_database_tests {
 
         // Note the step id and seq id are gotten from the database and program respectively.
         program_added.add_step(
-            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+            &FiringStep::new(0, 0, RampRate::DegPerHr(300), 1000, 10)
         );
         // butcher the kiln id:
 
@@ -2043,7 +2043,7 @@ mod kiln_database_tests {
 
         // Note the step id and seq id are gotten from the database and program respectively.
         program_added.add_step(
-            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+            &FiringStep::new(0, 0, RampRate::DegPerHr(300), 1000, 10)
         );
         // butcher the kiln id:
 
@@ -2075,7 +2075,7 @@ mod kiln_database_tests {
 
         // Note the step id and seq id are gotten from the database and program respectively.
         program_added.add_step(
-            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+            &FiringStep::new(0, 0, RampRate::DegPerHr(300), 1000, 10)
         );
         // butcher the kiln id:
 
@@ -2107,7 +2107,7 @@ mod kiln_database_tests {
 
         // Note the step id and seq id are gotten from the database and program respectively.
         program_added.add_step(
-            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+            &FiringStep::new(0, 0, RampRate::DegPerHr(300), 1000, 10)
         );
         // butcher the kiln id:
 
@@ -2140,7 +2140,7 @@ mod kiln_database_tests {
 
         // Note the step id and seq id are gotten from the database and program respectively.
         program_added.add_step(
-            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+            &FiringStep::new(0, 0, RampRate::DegPerHr(300), 1000, 10)
         );
         // butcher the kiln id:
 
@@ -2174,7 +2174,7 @@ mod kiln_database_tests {
 
         // Note the step id and seq id are gotten from the database and program respectively.
         program_added.add_step(
-            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+            &FiringStep::new(0, 0, RampRate::DegPerHr(300), 1000, 10)
         );
         let update_status = db.update_kiln_program(&program_added);
         assert!(update_status.is_ok());
@@ -2202,13 +2202,13 @@ mod kiln_database_tests {
 
         // Note the step id and seq id are gotten from the database and program respectively.
         program_added.add_step(
-            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1000, 10)
+            &FiringStep::new(0, 0, RampRate::DegPerHr(300), 1000, 10)
         )
         .add_step(
-            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1200,  30)
+            &FiringStep::new(0, 0, RampRate::DegPerHr(300), 1200,  30)
         )
         .add_step(
-            &FiringStep::new(0, 0, RampRate::DegPerSec(300), 1320, 10)
+            &FiringStep::new(0, 0, RampRate::DegPerHr(300), 1320, 10)
         )
         .add_step(
             &FiringStep::new(0, 0, RampRate::AFAP, 900, 60)
@@ -2275,9 +2275,9 @@ mod kiln_database_tests {
         // Add a kiln and a firing sequence to the kiln.
         db.add_kiln("Big", "A big kiln").unwrap();
         let mut program = db.add_kiln_program("Big", "program", "A program").unwrap();
-        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 900, 10 ));
-        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1200, 5));
-        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1400, 10));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerHr(300), 900, 10 ));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerHr(300), 1200, 5));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerHr(300), 1400, 10));
         program.add_step(&FiringStep::new(0, 0, RampRate::AFAP, 1000, 30));
         db.update_kiln_program(&program).unwrap();
 
@@ -2307,15 +2307,15 @@ mod kiln_database_tests {
 
         // Since the ids won't match we need to do this the hard way
 
-        assert_eq!(firing.steps[0].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing.steps[0].ramp_rate(), RampRate::DegPerHr(300));
         assert_eq!(firing.steps[0].target_temp(), 900);
         assert_eq!(firing.steps[0].dwell_time(), 10);
 
-        assert_eq!(firing.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing.steps[1].ramp_rate(), RampRate::DegPerHr(300));
         assert_eq!(firing.steps[1].target_temp(), 1200);
         assert_eq!(firing.steps[1].dwell_time(), 5);
 
-        assert_eq!(firing.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing.steps[1].ramp_rate(), RampRate::DegPerHr(300));
         assert_eq!(firing.steps[2].target_temp(), 1400);
         assert_eq!(firing.steps[2].dwell_time(), 10);
 
@@ -2348,9 +2348,9 @@ mod kiln_database_tests {
         // Add a kiln and a firing sequence to the kiln. Kinda like a full fuse.
         db.add_kiln("Big", "A big kiln").unwrap();
         let mut program = db.add_kiln_program("Big", "program", "A program").unwrap();
-        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 900, 10 ));
-        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1200, 5));
-        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(300), 1400, 10));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerHr(300), 900, 10 ));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerHr(300), 1200, 5));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerHr(300), 1400, 10));
         program.add_step(&FiringStep::new(0, 0, RampRate::AFAP, 1000, 30));
         db.update_kiln_program(&program).unwrap();
 
@@ -2358,8 +2358,8 @@ mod kiln_database_tests {
         let mut program = 
             db.add_kiln_program("Big", "second", "Simple slump")
             .unwrap();
-        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(250), 900, 10));
-        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerSec(250), 1250, 30));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerHr(250), 900, 10));
+        program.add_step(&FiringStep::new(0, 0, RampRate::DegPerHr(250), 1250, 30));
         program.add_step(&FiringStep::new(0,0, RampRate::AFAP, 1000, 60));
         db.update_kiln_program(&program).unwrap();
 
@@ -2389,15 +2389,15 @@ mod kiln_database_tests {
         
         // Since the ids won't match we need to do this the hard way
 
-        assert_eq!(firing1.steps[0].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing1.steps[0].ramp_rate(), RampRate::DegPerHr(300));
         assert_eq!(firing1.steps[0].target_temp(), 900);
         assert_eq!(firing1.steps[0].dwell_time(), 10);
 
-        assert_eq!(firing1.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing1.steps[1].ramp_rate(), RampRate::DegPerHr(300));
         assert_eq!(firing1.steps[1].target_temp(), 1200);
         assert_eq!(firing1.steps[1].dwell_time(), 5);
 
-        assert_eq!(firing1.steps[1].ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(firing1.steps[1].ramp_rate(), RampRate::DegPerHr(300));
         assert_eq!(firing1.steps[2].target_temp(), 1400);
         assert_eq!(firing1.steps[2].dwell_time(), 10);
 
@@ -2408,11 +2408,11 @@ mod kiln_database_tests {
 
         assert_eq!(firing2.steps.len(), 3);
 
-        assert_eq!(firing2.steps[0].ramp_rate(), RampRate::DegPerSec(250));
+        assert_eq!(firing2.steps[0].ramp_rate(), RampRate::DegPerHr(250));
         assert_eq!(firing2.steps[0].target_temp(), 900);
         assert_eq!(firing2.steps[0].dwell_time(), 10);
 
-        assert_eq!(firing2.steps[1].ramp_rate(), RampRate::DegPerSec(250));
+        assert_eq!(firing2.steps[1].ramp_rate(), RampRate::DegPerHr(250));
         assert_eq!(firing2.steps[1].target_temp(), 1250);
         assert_eq!(firing2.steps[1].dwell_time(), 30);
 
@@ -2653,7 +2653,7 @@ mod fring_step_tests {
     fn new_1() {
         // Degrees per second ramp rate.
         let step = FiringStep::new(
-            12, 34, RampRate::DegPerSec(300), 900, 10
+            12, 34, RampRate::DegPerHr(300), 900, 10
         );
     
     assert_eq!(
@@ -2701,9 +2701,9 @@ mod fring_step_tests {
     #[test]
     fn ramp_rate_2() {
         let step = FiringStep::new(
-            12, 34, RampRate::DegPerSec(300), 900, 10
+            12, 34, RampRate::DegPerHr(300), 900, 10
         );
-        assert_eq!(step.ramp_rate(), RampRate::DegPerSec(300));
+        assert_eq!(step.ramp_rate(), RampRate::DegPerHr(300));
     }
     #[test]
     fn target_temp_1() {
@@ -2725,13 +2725,13 @@ mod fring_step_tests {
         let mut step = FiringStep::new(
             12, 34, RampRate::AFAP, 900, 10
         );
-        step.set_ramp_rate(RampRate::DegPerSec(300));
-        assert_eq!(step.ramp_rate(), RampRate::DegPerSec(300));
+        step.set_ramp_rate(RampRate::DegPerHr(300));
+        assert_eq!(step.ramp_rate(), RampRate::DegPerHr(300));
     }
     #[test]
     fn set_ramp_2() {
         let mut  step = FiringStep::new(
-            12, 34, RampRate::DegPerSec(300), 900,10
+            12, 34, RampRate::DegPerHr(300), 900,10
         );
         step.set_ramp_rate(RampRate::AFAP);
         assert_eq!(step.ramp_rate(), RampRate::AFAP);
@@ -2778,7 +2778,7 @@ mod kiln_program_tests {
         let seq = FiringSequence::new(1, "Slump", "Slump with no relief", 1);
         let mut program = KilnProgram::new(&k, &seq);
 
-        let step = FiringStep::new(1, 1, RampRate::DegPerSec(100), 900, 10);
+        let step = FiringStep::new(1, 1, RampRate::DegPerHr(100), 900, 10);
         program.add_step(&step);
 
         assert_eq!(program.steps.len(), 1);    // There's a step.
@@ -2793,10 +2793,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         program.add_step(&step1);
@@ -2814,10 +2814,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         let steps = vec![step1, step2];
@@ -2838,10 +2838,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         program.add_step(&step1);
@@ -2856,10 +2856,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         program.add_step(&step1);
@@ -2875,10 +2875,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         program.add_step(&step1);
@@ -2906,10 +2906,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         program.add_step(&step1);
@@ -2926,10 +2926,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         program.add_step(&step1);
@@ -2959,10 +2959,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         program.add_step(&step1);
@@ -2983,10 +2983,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         program.add_step(&step1);
@@ -3015,10 +3015,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         program.add_step(&step1);
@@ -3041,10 +3041,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         program.add_step(&step1);
@@ -3067,10 +3067,10 @@ mod kiln_program_tests {
         let mut program = KilnProgram::new(&k, &seq);
 
         let step1 = FiringStep::new(
-            1, 1, RampRate::DegPerSec(100), 900, 10
+            1, 1, RampRate::DegPerHr(100), 900, 10
         );
         let step2 = FiringStep::new(
-            2, 1, RampRate::DegPerSec(300), 1200, 30
+            2, 1, RampRate::DegPerHr(300), 1200, 30
         );
 
         program.add_step(&step1);
