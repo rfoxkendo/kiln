@@ -43,7 +43,7 @@ fn main() {
         Commands::Program {operation: op, args: args}    => 
             program(&mut db, &op, args ),        
         Commands::Project { operation: op, args: args} => 
-            println!("project {} {:?}", op, args),
+            project(&mut db, &op, args),
     };
     
 }
@@ -112,7 +112,7 @@ fn program(db : &mut database::KilnDatabase, operation : &str, args : Vec<String
             exit(-1);
         }
         if let Err(e) = db.add_kiln_program(&kiln_name, &pgm_name, &description) {
-            eprintln!("Failed to add program {} to kiln{} ({}) : {}", pgm_name, kiln_name, description, e);
+            eprintln!("Failed to add program {} to kiln {} ({}) : {}", pgm_name, kiln_name, description, e);
             exit(-1);
         }
         return;
@@ -254,6 +254,64 @@ fn print_program(name : &str, pgm : &database::KilnProgram) {
         }
     } else {
         println!("No steps defined yet.");
+    }
+
+}
+
+// Handle the project subcommand:
+// subcommands:
+//   project create name [description]
+//   project list
+//   project info name
+//   project add-firing project kiln program
+//   project add-image project image-file [caption]
+//  
+fn project(db: &mut database::KilnDatabase, op : &str, args: Vec<String>) {
+
+    if op == "create" {
+        // Can be one or two parameters must be one.
+
+        if args.len() < 1 {
+            eprintln!("project create needs a project name");
+            exit(-1);
+        }
+        if args.len() > 2 {
+            eprintln!("project create too many command parameters.")
+        }
+        let project = args[0].clone();
+        let desc    = if args.len() == 2 {
+            args[1].clone()
+        } else {
+            String::from ("")
+        };
+
+        if let Err(e) = db.add_project(&project, &desc) {
+            eprintln!(
+                "Error adding project {} ({}) : {}",
+                project, desc, e
+            );
+            exit(-1);
+        }
+        return;
+    } else if op == "list" {
+        if args.len() != 0 {
+            eprintln!("the project list operation does not expect additional command parameters");
+            exit(-1);
+        }
+        match db.list_projects() {
+            Ok(l) => {
+                println!("Project names:");
+                for n in l {
+                    println!(" {}", n);
+                }
+            },
+            Err(e) => {
+                eprintln!("Unable to compile project list: {}", e);
+                exit(-1);
+            }
+        }
+    } else {
+        eprintln!("Unsupported or illegal operation: {}", op)
     }
 
 }
