@@ -111,7 +111,7 @@ fn program(db : &mut database::KilnDatabase, operation : &str, args : Vec<String
             eprintln!("program create needs at most a program, kiln-name and description");
             exit(-1);
         }
-        if let Err(e) = db.add_kiln_program(&pgm_name, &kiln_name, &description) {
+        if let Err(e) = db.add_kiln_program(&kiln_name, &pgm_name, &description) {
             eprintln!("Failed to add program {} to kiln{} ({}) : {}", pgm_name, kiln_name, description, e);
             exit(-1);
         }
