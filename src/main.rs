@@ -1,8 +1,7 @@
-use std::f32::consts::E;
 
 use kiln::*;
 use clap::{Parser, Subcommand};
-
+use std::process::exit;
 // Define the commands?
 
 #[derive(Parser)]
@@ -98,14 +97,91 @@ fn kiln(db : &mut database::KilnDatabase, operation : &str, kiln_info : Vec<Stri
 //       Note that dwell time is integer minutes.
 fn program(db : &mut database::KilnDatabase, operation : &str, args : Vec<String>) {
     if operation == "create" {
-        
+        if args.len() < 2  {
+            eprintln!("program create needs at least a program and kiln name");
+            exit(-1);
+        }
+        let pgm_name = args[0].clone();
+        let kiln_name = args[1].clone();
+        let mut description  = String::from ("");  
+        if args.len() == 3 {
+            description = args[2].clone();
+        }
+        if args.len() > 3 {
+            eprintln!("program create needs at most a program, kiln-name and description");
+            exit(-1);
+        }
+        if let Err(e) = db.add_kiln_program(&pgm_name, &kiln_name, &description) {
+            eprintln!("Failed to add program {} to kiln{} ({}) : {}", pgm_name, kiln_name, description, e);
+            exit(-1);
+        }
+        return;
     } else if operation == "list" {
+        if args.len() != 1 {
+            eprintln!("program list requires just a kiln name");
+            exit(-1);
+        }
+        let kiln = args[0].clone();
+        match db.list_kiln_programs(&kiln) {
+            Ok(list) => {
+                println!("Prorams defined for kiln {}", kiln);
+                for pgm in list {
+                    println!("  {}", pgm);
+                }
+                return;
+            },
+            Err(e) => {
+                eprintln!("Unable to list programs for kiln {}", kiln);
+                exit(-1);
+            },
+        };
 
     } else if operation == "info" {
+        if args.len() != 2 {
+            eprintln!("program info requirews a kiln name and a program name");
+        }
+        let kiln = args[0].clone();
+        let pgm = args[1].clone();
+        match db.get_kiln_program(&kiln, &pgm) {
+            Ok(info) => { 
+                match info {
+                    Some(p) => print_program(&pgm, &p),
+                    None => eprintln!("No Such program in that kiln"),
+                }
+                return;
+            },
+            Err(e) => {
+                eprintln!(
+                    "Could not get information about program {} in kiln {} : {}",
+                    pgm, kiln, e
+                );
+                exit(-1);
+            }
+        }
 
     } else if operation == "add-step" {
 
     } else {
         eprintln!("Invalid 'program' subcommand: '{}'", operation);
     }
+}
+
+// Print the details of a kiln program:
+
+fn print_program(name : &str, pgm : &database::KilnProgram) {
+    println!("Kiln: {} ({})", pgm.kiln().name(), pgm.kiln().description());
+    println!("Program {} ({})", pgm.sequence().name(), pgm.sequence().description());
+    let steps = pgm.steps();
+    if steps.len() > 0 {
+        println!("Firing steps:");
+        for step in steps  {
+            println!(
+                "Ramp at {} deg/sec until {} deg hold for {} minutes",
+                step.ramp_rate(), step.target_temp(), step.dwell_time()
+            );
+        }
+    } else {
+        println!("No steps defined yet.");
+    }
+
 }
