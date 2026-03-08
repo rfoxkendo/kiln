@@ -131,7 +131,7 @@ fn program(db : &mut database::KilnDatabase, operation : &str, args : Vec<String
                 return;
             },
             Err(e) => {
-                eprintln!("Unable to list programs for kiln {}", kiln);
+                eprintln!("Unable to list programs for kiln {} : {}", kiln, e);
                 exit(-1);
             },
         };
@@ -310,8 +310,62 @@ fn project(db: &mut database::KilnDatabase, op : &str, args: Vec<String>) {
                 exit(-1);
             }
         }
+    } else if op == "info" {
+        if args.len() != 1 {
+            eprintln!("project info needs a project and only a project.");
+            exit(-1);
+        }
+        let project = args[0].clone();
+        let project_info = db.get_project(&project).unwrap();
+        describe_project(&project, project_info);
+    } else if op == "add-firing" {
+        if args.len() < 3 || args.len() > 4  {
+            eprintln!("add-firing requires a project a kiln and a program in that kiln and an optional comment.");
+            exit(-1);
+        }
+        let project = args[0].clone();
+        let kiln = args[1].clone();
+        let program = args[2].clone();
+
+        let comment = if args.len() == 4 {
+            args[3].clone()
+        } else {
+            String::new()
+        };
+        // We need the project and the kiln program:
+
+        let project_info = db.get_project(&project).unwrap().unwrap();
+        let updated_project = db.add_project_firing(&project_info, &kiln, &program, &comment).unwrap();
+        println!("Updated Project: ");
+        describe_project(&project, Some(updated_project));
+        
     } else {
         eprintln!("Unsupported or illegal operation: {}", op)
     }
 
+}
+// Describe a kiln project:
+
+fn describe_project(name : &str, info : Option<database::KilnProject>) {
+    if info.is_none() {
+        eprintln!("There is no project named {}", name);
+    } else {
+        let info = info.unwrap();
+        println!("Name: {} Description {}", info.project().name(), info.project().description());
+        println!("Firings:");
+        for (i, firing) in info.firings().iter().enumerate() {
+            println!(
+                "Firing in {}: {} - {}", 
+                firing.kiln().name(), firing.kiln().description(), info.firing_comments()[i]
+            );
+            println!("  Steps for {} {}:", firing.sequence().name(), firing.sequence().description());
+            for step in firing.steps().iter() {
+                println!(
+                    "   Ramp to {} degreees rate: {} Dwell: {} minutes", 
+                    step.target_temp(), step.ramp_rate(), step.dwell_time()
+                );
+            }
+        }
+        println!("There are {} pictures attached to this project", info.num_images());
+    }
 }
