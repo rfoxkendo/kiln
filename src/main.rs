@@ -2,6 +2,7 @@
 use kiln::*;
 use clap::{Parser, Subcommand};
 use std::process::exit;
+use std::fs;
 // Define the commands?
 
 #[derive(Parser)]
@@ -263,7 +264,7 @@ fn print_program(name : &str, pgm : &database::KilnProgram) {
 //   project create name [description]
 //   project list
 //   project info name
-//   project add-firing project kiln program
+//   project add-firing project kiln program [comment]
 //   project add-image project image-file [caption]
 //  
 fn project(db: &mut database::KilnDatabase, op : &str, args: Vec<String>) {
@@ -334,11 +335,38 @@ fn project(db: &mut database::KilnDatabase, op : &str, args: Vec<String>) {
         };
         // We need the project and the kiln program:
 
-        let project_info = db.get_project(&project).unwrap().unwrap();
-        let updated_project = db.add_project_firing(&project_info, &kiln, &program, &comment).unwrap();
+        let project_info = db.get_project(&project)
+            .expect("Failed to query for project")
+            .expect("No such project");
+        let updated_project = db.add_project_firing(&project_info, &kiln, &program, &comment)
+            .expect("Failed to insert new step");
         println!("Updated Project: ");
         describe_project(&project, Some(updated_project));
-        
+    } else if op == "add-image" {
+        // need project name, image file and optional caption.
+
+        if args.len() < 2 || args.len() > 3 {
+            eprintln!("add-image needs a project an image file and an optional caption");
+            exit(-1);
+        }
+        let project = args[0].clone();
+        let image_file = args[1].clone();
+        let caption = if args.len() == 3 {
+            args[2].clone()
+        } else {
+            String::new()
+        };
+        // Get the project.
+        let project_info = db.get_project(&project)
+            .expect("Failed to query project")
+            .expect("no such project");
+        // Get the data in the image.
+        let image = fs::read(&image_file).expect("Failed to read the image");
+        // Add the image to the project.
+        let updated_project = db.add_project_image(&project_info, &image_file, &caption, &image)
+            .expect("failed to add image to project");
+        describe_project(&project, Some(updated_project));
+
     } else {
         eprintln!("Unsupported or illegal operation: {}", op)
     }
