@@ -116,7 +116,7 @@ pub enum RampRate {
 impl Display for RampRate {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
-            RampRate::DegPerHr(n) => write!(f, "{}", n),
+            RampRate::DegPerHr(n) => write!(f, "{} deg/hr", n),
             RampRate::AFAP => write!(f, "AFAP")
         }
     }
@@ -1524,13 +1524,14 @@ impl KilnDatabase {
         if db_project.project().id() != project.project().id() {
             return Err(DatabaseError::InconsistentProject(project.project().name()));
         }
-        // Add the program to the project in the database.
+        // Add the program to the project in the database, sequenced at the end of any
+        // existing firings.
 
         let result = self.db.execute(
             "INSERT INTO Project_firings (project_id, firing_sequence_id, comment)
                         VALUES(?,?,?)
             ",
-            [project.project.id().to_string(), program.sequence().id().to_string(), comment.into()]
+            [project.project.id().to_string(), (project.firings().len() + 1).to_string(), comment.into()]
         );
         if let Err(sqle) = result {
             return Err(DatabaseError::SqlError(sqle));
