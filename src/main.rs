@@ -361,7 +361,7 @@ fn describe_project(name : &str, info : Option<database::KilnProject>) {
             println!("  Steps for {} {}:", firing.sequence().name(), firing.sequence().description());
             for step in firing.steps().iter() {
                 println!(
-                    "   Ramp to {} degreees rate: {} Dwell: {} minutes", 
+                    "   Ramp to {} degrees rate: {} Dwell: {} minutes", 
                     step.target_temp(), step.ramp_rate(), step.dwell_time()
                 );
             }
